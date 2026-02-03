@@ -48,7 +48,7 @@ const JUMP_VY = -12;
 const DOUBLE_JUMP_VY = -8;
 const COYOTE_FRAMES = 6;
 const JUMP_BUFFER_FRAMES = 4;
-const AUTO_SCROLL_SPEED_MIN = 1.5;
+const AUTO_SCROLL_SPEED_MIN = 2.0;
 const AUTO_SCROLL_SPEED_MAX = 3.2;
 const MOVE_SPEED = 2;
 const SPRITE_SCALE = 2;
@@ -60,11 +60,11 @@ const LIVES_START = 3;
 const DOUBLE_JUMP_UNLOCK_REP = 2000;
 const ENEMY_SPEED = 1.2;
 
-// Scroll speed ramps from MIN → MAX over the first 6 000 px of distance
+// Scroll speed ramps from MIN → MAX over the first 3 500 px of distance
 function getScrollSpeed() {
   if (!game) return AUTO_SCROLL_SPEED_MIN;
   return AUTO_SCROLL_SPEED_MIN +
-    (AUTO_SCROLL_SPEED_MAX - AUTO_SCROLL_SPEED_MIN) * Math.min(1, game.distance / 6000);
+    (AUTO_SCROLL_SPEED_MAX - AUTO_SCROLL_SPEED_MIN) * Math.min(1, game.distance / 3500);
 }
 
 const STATE = { TITLE: 0, PLAYING: 1, GAMEOVER: 2 };
@@ -469,57 +469,85 @@ function drawNeonRect(ctx, x, y, w, h, color, glowColor) {
 }
 
 function drawPlatformNeonLedge(ctx, x, y, w) {
-  // glow
+  // glow strip (top 3px)
   ctx.save();
   ctx.shadowColor = '#FF2D8C';
-  ctx.shadowBlur = 6;
+  ctx.shadowBlur = 10;
   ctx.fillStyle = '#FF2D8C';
   ctx.fillRect(x, y, w, 3);
   ctx.restore();
-  // crisp top edge
+  // bright top edge
   ctx.fillStyle = '#FF69B4';
-  ctx.fillRect(x, y, w, 2);
-  // body
-  ctx.fillStyle = '#1a0a2e';
-  ctx.fillRect(x, y + 2, w, 5);
+  ctx.fillRect(x, y, w, 3);
+  // body – visible mid-tone
+  ctx.fillStyle = '#2d1248';
+  ctx.fillRect(x, y + 3, w, 10);
+  // subtle horizontal stripe
+  ctx.fillStyle = '#3d1a5e';
+  ctx.fillRect(x, y + 7, w, 3);
   // cyan accent line at bottom
   ctx.fillStyle = '#00E5FF';
-  ctx.fillRect(x, y + 6, w, 1);
+  ctx.fillRect(x, y + 13, w, 2);
+  // thin dark edge
+  ctx.fillStyle = '#1a0a2e';
+  ctx.fillRect(x, y + 15, w, 1);
 }
 
 function drawPlatformGraffitiWall(ctx, x, y, w) {
-  ctx.fillStyle = '#1e1e2e';
-  ctx.fillRect(x, y, w, 7);
-  ctx.fillStyle = '#2a2a3e';
-  ctx.fillRect(x, y, w, 2);
-  // random colored dots (seeded by x)
+  // body – warm dark grey, clearly visible
+  ctx.fillStyle = '#3b3350';
+  ctx.fillRect(x, y, w, 16);
+  // lighter top band
+  ctx.fillStyle = '#4e4466';
+  ctx.fillRect(x, y, w, 3);
+  // random colored graffiti dots (seeded by x)
   let sd = x | 0;
   const colors = ['#FF2D8C','#00E5FF','#FFD700','#B388FF','#FF6B6B','#7CFC00'];
-  const dotCount = Math.floor(w / 12);
+  const dotCount = Math.floor(w / 10);
   for (let i = 0; i < dotCount; i++) {
     const r1 = sRand(sd); sd = r1.s;
     const r2 = sRand(sd); sd = r2.s;
     const r3 = sRand(sd); sd = r3.s;
-    const dx = x + r1.v * (w - 4) + 2;
-    const dy = y + r2.v * 4 + 1;
+    const dx = x + r1.v * (w - 6) + 3;
+    const dy = y + 4 + r2.v * 8;
     ctx.fillStyle = colors[Math.floor(r3.v * colors.length)];
-    ctx.fillRect(dx, dy, 2, 2);
+    ctx.fillRect(dx, dy, 3, 3);
   }
-  // neon top
+  // neon cyan glow on top edge
+  ctx.save();
+  ctx.shadowColor = '#00E5FF';
+  ctx.shadowBlur = 6;
   ctx.fillStyle = '#00E5FF';
-  ctx.fillRect(x, y, w, 1);
+  ctx.fillRect(x, y, w, 2);
+  ctx.restore();
+  ctx.fillStyle = '#00E5FF';
+  ctx.fillRect(x, y, w, 2);
 }
 
 function drawPlatformSubwayRoof(ctx, x, y, w) {
-  ctx.fillStyle = '#3a3a4a';
-  ctx.fillRect(x, y, w, 7);
-  ctx.fillStyle = '#2a2a3a';
-  ctx.fillRect(x, y + 7, w, 1);
+  // body – medium grey, clearly visible
+  ctx.fillStyle = '#5a5a6a';
+  ctx.fillRect(x, y, w, 16);
+  // lighter top strip
+  ctx.fillStyle = '#6e6e7e';
+  ctx.fillRect(x, y, w, 3);
+  // bottom edge stripe
+  ctx.fillStyle = '#4a4a5a';
+  ctx.fillRect(x, y + 13, w, 3);
+  // glow accent
+  ctx.save();
+  ctx.shadowColor = '#B388FF';
+  ctx.shadowBlur = 5;
+  ctx.fillStyle = '#B388FF';
+  ctx.fillRect(x, y, w, 2);
+  ctx.restore();
+  ctx.fillStyle = '#B388FF';
+  ctx.fillRect(x, y, w, 2);
   // rivets
-  ctx.fillStyle = '#888';
-  ctx.fillRect(x + 3, y + 2, 3, 3);
-  ctx.fillRect(x + w - 6, y + 2, 3, 3);
-  if (w > 80) ctx.fillRect(x + (w >> 1) - 1, y + 2, 3, 3);
+  ctx.fillStyle = '#aaa';
+  ctx.fillRect(x + 4, y + 5, 4, 4);
+  ctx.fillRect(x + w - 8, y + 5, 4, 4);
+  if (w > 80) ctx.fillRect(x + (w >> 1) - 2, y + 5, 4, 4);
 }
 
 function drawPlatform(ctx, plat) {
@@ -901,7 +929,7 @@ function generateChunk(startX) {
     if (py > 370) py = 370;
 
     const type = Math.floor(r3.v * 3); // 0=neon, 1=graffiti, 2=subway
-    const platH = 8;
+    const platH = 16;
 
     chunk.platforms.push({ x: px, y: py, w: w, h: platH, type: type, seed: (px * 31 + py * 17) | 0 });
 
@@ -1140,9 +1168,9 @@ function drawNearground(ctx) {
 let player = null;
 let game = null;
 
-function checkPlatformCollision() {
+function checkPlatformCollision(plats) {
   if (!player) return;
-  const plats = getAllPlatforms();
+  if (!plats) plats = getAllPlatforms();
   player.isGrounded = false;
 
   for (let i = 0; i < plats.length; i++) {
@@ -1166,10 +1194,10 @@ function checkPlatformCollision() {
   }
 }
 
-function checkEnemyCollision() {
+function checkEnemyCollision(enemies) {
   if (!player || !game) return;
   if (player.invulnTimer > 0) return;
-  const enemies = getAllEnemies();
+  if (!enemies) enemies = getAllEnemies();
 
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
@@ -1201,9 +1229,9 @@ function checkEnemyCollision() {
   }
 }
 
-function checkCoinCollision() {
+function checkCoinCollision(coins) {
   if (!player || !game) return;
-  const coins = getAllCoins();
+  if (!coins) coins = getAllCoins();
   const pcx = player.x + PLAYER_W * 0.5;
   const pcy = player.y + PLAYER_H * 0.5;
 
@@ -1299,11 +1327,28 @@ function updatePlayerPhysics() {
       game.lives = 0;
       transitionToGameOver();
     } else {
-      // respawn
-      player.x = cameraX + 80;
-      player.y = 80;
+      // respawn: find the nearest platform at or ahead of the camera
+      let bestPlat = null;
+      for (let ci = 0; ci < chunks.length; ci++) {
+        const ch = chunks[ci];
+        for (let pi = 0; pi < ch.platforms.length; pi++) {
+          const p = ch.platforms[pi];
+          // platform must be at least partially visible or just ahead
+          if (p.x + p.w < cameraX) continue;
+          if (!bestPlat || p.x < bestPlat.x) bestPlat = p;
+        }
+      }
+      if (bestPlat) {
+        // centre player on the platform, drop from above
+        player.x = bestPlat.x + (bestPlat.w - PLAYER_W) * 0.5;
+        player.y = bestPlat.y - PLAYER_H - 60;
+      } else {
+        // fallback: no platform found, place at camera + 80
+        player.x = cameraX + 80;
+        player.y = 80;
+      }
       player.vy = 0;
-      player.prevY = 80;
+      player.prevY = player.y;
       player.isGrounded = false;
       player.isJumping = true;
       player.invulnTimer = 60;
@@ -1400,15 +1445,22 @@ function gameLoop(timestamp) {
   requestAnimationFrame(gameLoop);
 }
 
+// Per-frame caches — rebuilt once at top of updatePlaying, reused by collision + draw
+let _cachedPlatforms = [], _cachedEnemies = [], _cachedCoins = [];
+
 function updatePlaying() {
   updateSequencer();
   updatePlayerPhysics();
   ensureChunksAhead();
   cullChunksBehind();
 
+  // build per-frame caches exactly once
+  _cachedPlatforms = getAllPlatforms();
+  _cachedEnemies   = getAllEnemies();
+  _cachedCoins     = getAllCoins();
+
   // update enemies
-  const enemies = getAllEnemies();
-  for (let i = 0; i < enemies.length; i++) updateEnemy(enemies[i]);
+  for (let i = 0; i < _cachedEnemies.length; i++) updateEnemy(_cachedEnemies[i]);
 
   // update coin bobs
   for (let ci = 0; ci < chunks.length; ci++) {
@@ -1418,9 +1470,9 @@ function updatePlaying() {
     }
   }
 
-  checkPlatformCollision();
-  checkEnemyCollision();
-  checkCoinCollision();
+  checkPlatformCollision(_cachedPlatforms);
+  checkEnemyCollision(_cachedEnemies);
+  checkCoinCollision(_cachedCoins);
   updateParticles();
   updateScoring();
 
@@ -1450,23 +1502,20 @@ function drawPlaying() {
   // layer 3: nearground
   drawNearground(ctx);
 
-  // platforms
-  const plats = getAllPlatforms();
-  for (let i = 0; i < plats.length; i++) {
-    const p = plats[i];
+  // platforms (use per-frame cache)
+  for (let i = 0; i < _cachedPlatforms.length; i++) {
+    const p = _cachedPlatforms[i];
     const dx = p.x - cameraX;
     if (dx + p.w < -10 || dx > GAME_W + 10) continue;
     drawPlatform(ctx, { x: dx, y: p.y, w: p.w, h: p.h, type: p.type, seed: p.seed });
   }
 
-  // enemies
-  const enemies = getAllEnemies();
-  for (let i = 0; i < enemies.length; i++) drawEnemy(ctx, enemies[i]);
+  // enemies (use per-frame cache)
+  for (let i = 0; i < _cachedEnemies.length; i++) drawEnemy(ctx, _cachedEnemies[i]);
 
-  // coins
-  const coins = getAllCoins();
-  for (let i = 0; i < coins.length; i++) {
-    const c = coins[i];
+  // coins (use per-frame cache)
+  for (let i = 0; i < _cachedCoins.length; i++) {
+    const c = _cachedCoins[i];
     const dx = c.x - cameraX;
     if (dx + 14 < -5 || dx > GAME_W + 5) continue;
     const dy = c.baseY + Math.sin(c.bobPhase) * 5;
