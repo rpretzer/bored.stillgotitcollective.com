@@ -1,0 +1,2006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Still Got It Collective</title>
+<meta name="description" content="Still Got It Runner – Retro 80s infinite platformer. Run, jump, collect chains, and prove you still got it.">
+<meta property="og:title" content="Still Got It Collective – Still Got It Runner">
+<meta property="og:description" content="Retro 80s infinite side-scrolling platformer. Neon cities, gold chains, hip-hop beats. Dance like you did.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stillgotitcollective.com">
+<meta property="og:image" content="https://stillgotitcollective.com/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Still Got It Collective – Still Got It Runner">
+<meta name="twitter:description" content="Retro 80s infinite platformer. Neon cities, gold chains, hip-hop beats.">
+<meta name="twitter:image" content="https://stillgotitcollective.com/og.png">
+<!-- Inline neon-pink 16x16 favicon (valid minimal PNG) -->
+<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVQ4jWP4z8Dwn4EBBRgZmRkZGZkYGZkYGRkZGRkZGZkZGQAAPbMEAVHPkK0AAAAASUVORK5CYII=">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #0a0a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#gameCanvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<script>
+// ─── §1 DONE (HTML above) ───────────────────────────────────────────────────
+
+// ─── §2 CONSTANTS + STATE ───────────────────────────────────────────────────
+const GAME_W = 800, GAME_H = 450;
+const GRAVITY = 0.5;
+const JUMP_VY = -12;
+const DOUBLE_JUMP_VY = -8;
+const COYOTE_FRAMES = 6;
+const JUMP_BUFFER_FRAMES = 4;
+const AUTO_SCROLL_SPEED = 3;
+const MOVE_SPEED = 2;
+const PLAYER_W = 16, PLAYER_H = 24;
+const CHUNK_WIDTH = 420;
+const COIN_VALUE = 50;
+const LIVES_START = 3;
+const DOUBLE_JUMP_UNLOCK_REP = 2000;
+const ENEMY_SPEED = 1.2;
+
+const STATE = { TITLE: 0, PLAYING: 1, GAMEOVER: 2 };
+let gameState = STATE.TITLE;
+let frameCounter = 0;
+
+// Drum patterns (16 steps)
+const KICK_PAT  = [1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0];
+const SNARE_PAT = [0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0];
+const HIHAT_PAT = [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0];
+
+// ─── §3 PIXEL FONT ──────────────────────────────────────────────────────────
+const FONT = {
+  ' ':[0,0,0,0,0,0,0],
+  '!':[0b00100,0b00100,0b00100,0b00100,0b00100,0b00000,0b00100],
+  '.':[0b00000,0b00000,0b00000,0b00000,0b00000,0b00000,0b00100],
+  ':':[0b00000,0b00100,0b00000,0b00000,0b00000,0b00100,0b00000],
+  '@':[0b01110,0b10001,0b10111,0b10101,0b10111,0b10000,0b01110],
+  '0':[0b01110,0b10001,0b10011,0b10101,0b11001,0b10001,0b01110],
+  '1':[0b00100,0b01100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  '2':[0b01110,0b10001,0b00001,0b00110,0b01000,0b10000,0b11111],
+  '3':[0b01110,0b10001,0b00001,0b00110,0b00001,0b10001,0b01110],
+  '4':[0b00010,0b00110,0b01010,0b10010,0b11111,0b00010,0b00010],
+  '5':[0b11111,0b10000,0b11110,0b00001,0b00001,0b10001,0b01110],
+  '6':[0b00110,0b01000,0b10000,0b11110,0b10001,0b10001,0b01110],
+  '7':[0b11111,0b00001,0b00010,0b00100,0b00100,0b00100,0b00100],
+  '8':[0b01110,0b10001,0b10001,0b01110,0b10001,0b10001,0b01110],
+  '9':[0b01110,0b10001,0b10001,0b01111,0b00001,0b00010,0b01100],
+  'A':[0b01110,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'B':[0b11110,0b10001,0b10001,0b11110,0b10001,0b10001,0b11110],
+  'C':[0b01110,0b10001,0b10000,0b10000,0b10000,0b10001,0b01110],
+  'D':[0b11100,0b10010,0b10001,0b10001,0b10001,0b10010,0b11100],
+  'E':[0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b11111],
+  'F':[0b11111,0b10000,0b10000,0b11110,0b10000,0b10000,0b10000],
+  'G':[0b01110,0b10001,0b10000,0b10111,0b10001,0b10001,0b01111],
+  'H':[0b10001,0b10001,0b10001,0b11111,0b10001,0b10001,0b10001],
+  'I':[0b01110,0b00100,0b00100,0b00100,0b00100,0b00100,0b01110],
+  'J':[0b00111,0b00001,0b00001,0b00001,0b00001,0b10001,0b01110],
+  'K':[0b10001,0b10010,0b10100,0b11000,0b10100,0b10010,0b10001],
+  'L':[0b10000,0b10000,0b10000,0b10000,0b10000,0b10000,0b11111],
+  'M':[0b10001,0b11011,0b10101,0b10001,0b10001,0b10001,0b10001],
+  'N':[0b10001,0b11001,0b10101,0b10011,0b10001,0b10001,0b10001],
+  'O':[0b01110,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'P':[0b11110,0b10001,0b10001,0b11110,0b10000,0b10000,0b10000],
+  'Q':[0b01110,0b10001,0b10001,0b10001,0b10101,0b10010,0b01101],
+  'R':[0b11110,0b10001,0b10001,0b11110,0b10100,0b10010,0b10001],
+  'S':[0b01111,0b10000,0b10000,0b01110,0b00001,0b00001,0b11110],
+  'T':[0b11111,0b00100,0b00100,0b00100,0b00100,0b00100,0b00100],
+  'U':[0b10001,0b10001,0b10001,0b10001,0b10001,0b10001,0b01110],
+  'V':[0b10001,0b10001,0b10001,0b10001,0b10001,0b01010,0b00100],
+  'W':[0b10001,0b10001,0b10001,0b10001,0b10101,0b11011,0b10001],
+  'X':[0b10001,0b10001,0b01010,0b00100,0b01010,0b10001,0b10001],
+  'Y':[0b10001,0b10001,0b01010,0b00100,0b00100,0b00100,0b00100],
+  'Z':[0b11111,0b00001,0b00010,0b00100,0b01000,0b10000,0b11111],
+  '-':[0b00000,0b00000,0b00000,0b11111,0b00000,0b00000,0b00000],
+  '/':[0b00001,0b00001,0b00010,0b00100,0b01000,0b10000,0b10000],
+  ',':[0b00000,0b00000,0b00000,0b00000,0b00000,0b00100,0b01000]
+};
+
+function drawPixelText(ctx, text, x, y, color, scale) {
+  ctx.fillStyle = color;
+  const str = String(text).toUpperCase();
+  let cx = x;
+  for (let i = 0; i < str.length; i++) {
+    const ch = FONT[str[i]];
+    if (!ch) { cx += 6 * scale; continue; }
+    for (let row = 0; row < 7; row++) {
+      for (let col = 0; col < 5; col++) {
+        if (ch[row] & (1 << (4 - col))) {
+          ctx.fillRect(cx + col * scale, y + row * scale, scale, scale);
+        }
+      }
+    }
+    cx += 6 * scale;
+  }
+  return cx - x; // return width drawn
+}
+
+function measurePixelText(text, scale) {
+  return String(text).length * 6 * scale;
+}
+
+// ─── §4 INPUT ────────────────────────────────────────────────────────────────
+const input = { left: false, right: false, jump: false, enter: false, up: false, down: false };
+const prevInput = { jump: false, enter: false, up: false, down: false, left: false, right: false };
+input.jumpPressed = false;
+input.enterPressed = false;
+input.upPressed = false;
+input.downPressed = false;
+input.leftPressed = false;
+input.rightPressed = false;
+
+let audioUnlocked = false;
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'ArrowLeft')  input.left  = true;
+  if (e.key === 'ArrowRight') input.right = true;
+  if (e.key === 'ArrowUp')    input.up    = true;
+  if (e.key === 'ArrowDown')  input.down  = true;
+  if (e.key === ' ' || e.key === 'ArrowUp') { input.jump = true; e.preventDefault(); }
+  if (e.key === 'Enter')      input.enter = true;
+  if (!audioUnlocked) { audioUnlocked = true; if (audioCtx) audioCtx.resume(); }
+});
+document.addEventListener('keyup', function(e) {
+  if (e.key === 'ArrowLeft')  input.left  = false;
+  if (e.key === 'ArrowRight') input.right = false;
+  if (e.key === 'ArrowUp')    input.up    = false;
+  if (e.key === 'ArrowDown')  input.down  = false;
+  if (e.key === ' ' || e.key === 'ArrowUp') input.jump = false;
+  if (e.key === 'Enter')      input.enter = false;
+});
+
+// ─── §5 CANVAS BOOTSTRAP ────────────────────────────────────────────────────
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = GAME_W;
+canvas.height = GAME_H;
+
+function resizeCanvas() {
+  const scaleX = window.innerWidth  / GAME_W;
+  const scaleY = window.innerHeight / GAME_H;
+  const scale  = Math.min(scaleX, scaleY);
+  canvas.style.width  = (GAME_W * scale) + 'px';
+  canvas.style.height = (GAME_H * scale) + 'px';
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ─── §6 WEB AUDIO ────────────────────────────────────────────────────────────
+let audioCtx = null;
+let masterGain = null;
+let noiseBuffer = null;
+let sequencerRunning = false;
+let seqStep = 0;
+let nextStepTime = 0;
+let bpm = 120;
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.6;
+  masterGain.connect(audioCtx.destination);
+}
+
+function getNoiseBuffer() {
+  if (noiseBuffer) return noiseBuffer;
+  if (!audioCtx) return null;
+  const len = audioCtx.sampleRate;
+  noiseBuffer = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+  const data = noiseBuffer.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+  return noiseBuffer;
+}
+
+function playKick(time) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const env = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(150, time);
+  osc.frequency.exponentialRampToValueAtTime(30, time + 0.08);
+  env.gain.setValueAtTime(0.7, time);
+  env.gain.exponentialRampToValueAtTime(0.001, time + 0.18);
+  osc.connect(env);
+  env.connect(masterGain);
+  osc.start(time);
+  osc.stop(time + 0.2);
+}
+
+function playSnare(time) {
+  if (!audioCtx) return;
+  const nb = getNoiseBuffer();
+  if (!nb) return;
+  // noise component
+  const src = audioCtx.createBufferSource();
+  src.buffer = nb;
+  const hp = audioCtx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 200;
+  const env = audioCtx.createGain();
+  env.gain.setValueAtTime(0.4, time);
+  env.gain.exponentialRampToValueAtTime(0.001, time + 0.12);
+  src.connect(hp);
+  hp.connect(env);
+  env.connect(masterGain);
+  src.start(time);
+  src.stop(time + 0.15);
+  // tone body
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.value = 180;
+  const env2 = audioCtx.createGain();
+  env2.gain.setValueAtTime(0.3, time);
+  env2.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
+  osc.connect(env2);
+  env2.connect(masterGain);
+  osc.start(time);
+  osc.stop(time + 0.1);
+}
+
+function playHiHat(time) {
+  if (!audioCtx) return;
+  const nb = getNoiseBuffer();
+  if (!nb) return;
+  const src = audioCtx.createBufferSource();
+  src.buffer = nb;
+  const hp = audioCtx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 6000;
+  const env = audioCtx.createGain();
+  env.gain.setValueAtTime(0.15, time);
+  env.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+  src.connect(hp);
+  hp.connect(env);
+  env.connect(masterGain);
+  src.start(time);
+  src.stop(time + 0.06);
+}
+
+function audioPlayJump() {
+  if (!audioCtx) { initAudio(); if (audioCtx) audioCtx.resume(); }
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const nb = getNoiseBuffer();
+  if (!nb) return;
+  const src = audioCtx.createBufferSource();
+  src.buffer = nb;
+  const hp = audioCtx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.setValueAtTime(2200, t);
+  hp.frequency.exponentialRampToValueAtTime(400, t + 0.12);
+  const env = audioCtx.createGain();
+  env.gain.setValueAtTime(0.25, t);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+  src.connect(hp);
+  hp.connect(env);
+  env.connect(masterGain);
+  src.start(t);
+  src.stop(t + 0.16);
+}
+
+function audioPlayCoin() {
+  if (!audioCtx) { initAudio(); if (audioCtx) audioCtx.resume(); }
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  [800, 1200].forEach(function(freq, i) {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const env = audioCtx.createGain();
+    const start = t + i * 0.035;
+    env.gain.setValueAtTime(0.3, start);
+    env.gain.exponentialRampToValueAtTime(0.001, start + 0.09);
+    osc.connect(env);
+    env.connect(masterGain);
+    osc.start(start);
+    osc.stop(start + 0.11);
+  });
+}
+
+function audioPlayBeatDrop() {
+  if (!audioCtx) { initAudio(); if (audioCtx) audioCtx.resume(); }
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.value = 40;
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 120;
+  const env = audioCtx.createGain();
+  env.gain.setValueAtTime(0.001, t);
+  env.gain.linearRampToValueAtTime(0.5, t + 0.06);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+  osc.connect(lp);
+  lp.connect(env);
+  env.connect(masterGain);
+  osc.start(t);
+  osc.stop(t + 0.75);
+}
+
+function startSequencer() {
+  if (!audioCtx) { initAudio(); if (audioCtx) audioCtx.resume(); }
+  if (!audioCtx) return;
+  sequencerRunning = true;
+  seqStep = 0;
+  nextStepTime = audioCtx.currentTime + 0.05;
+}
+
+function stopSequencer() {
+  sequencerRunning = false;
+}
+
+function updateSequencer() {
+  if (!sequencerRunning || !audioCtx) return;
+  const lookahead = 0.1;
+  const stepDur = 60.0 / bpm / 4; // 16th notes
+  while (nextStepTime < audioCtx.currentTime + lookahead) {
+    if (KICK_PAT[seqStep])  playKick(nextStepTime);
+    if (SNARE_PAT[seqStep]) playSnare(nextStepTime);
+    if (HIHAT_PAT[seqStep]) playHiHat(nextStepTime);
+    seqStep = (seqStep + 1) % 16;
+    nextStepTime += stepDur;
+  }
+}
+
+// ─── §7 PARTICLE SYSTEM ─────────────────────────────────────────────────────
+const particles = [];
+
+function emitParticles(x, y, count, config) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = config.speed || 2;
+    particles.push({
+      x: x,
+      y: y,
+      vx: Math.cos(angle) * (speed * 0.5 + Math.random() * speed),
+      vy: Math.sin(angle) * (speed * 0.5 + Math.random() * speed) - (config.upBias || 1),
+      life: config.life || 25,
+      maxLife: config.life || 25,
+      color: config.colors[Math.floor(Math.random() * config.colors.length)],
+      size: config.size || 2
+    });
+  }
+}
+
+function emitLandingConfetti(x, y) {
+  emitParticles(x, y, 8, {
+    colors: ['#FF2D8C','#00E5FF','#FFD700','#B388FF','#FF6B6B'],
+    life: 28, speed: 2.5, size: 2, upBias: 0.5
+  });
+}
+
+function emitCoinBurst(x, y) {
+  emitParticles(x, y, 6, {
+    colors: ['#FFD700','#DAA520','#FFD700','#FFF8DC'],
+    life: 18, speed: 3, size: 2, upBias: 1.5
+  });
+}
+
+function emitDoubleJumpBurst(x, y) {
+  emitParticles(x, y, 12, {
+    colors: ['#FFD700','#FF2D8C','#00E5FF','#B388FF'],
+    life: 22, speed: 3.5, size: 3, upBias: 2
+  });
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.12;
+    p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function drawParticles(ctx) {
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    const alpha = p.life / p.maxLife;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - p.size * 0.5, p.y - p.size * 0.5, p.size, p.size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ─── §8 SCREEN SHAKE ────────────────────────────────────────────────────────
+let shakeAmount = 0;
+
+function triggerShake(mag) {
+  if (mag > shakeAmount) shakeAmount = mag;
+}
+
+function getShakeOffset() {
+  return {
+    x: (Math.random() * 2 - 1) * shakeAmount,
+    y: (Math.random() * 2 - 1) * shakeAmount
+  };
+}
+
+// ─── §9 DRAW HELPERS ────────────────────────────────────────────────────────
+function sRand(seed) {
+  seed = (seed * 1664525 + 1013904223) | 0;
+  return { v: (seed >>> 0) / 4294967296, s: seed };
+}
+
+function drawNeonRect(ctx, x, y, w, h, color, glowColor) {
+  ctx.save();
+  ctx.shadowColor = glowColor || color;
+  ctx.shadowBlur = 8;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, w, h);
+  ctx.restore();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+}
+
+function drawPlatformNeonLedge(ctx, x, y, w) {
+  // glow
+  ctx.save();
+  ctx.shadowColor = '#FF2D8C';
+  ctx.shadowBlur = 6;
+  ctx.fillStyle = '#FF2D8C';
+  ctx.fillRect(x, y, w, 3);
+  ctx.restore();
+  // crisp top edge
+  ctx.fillStyle = '#FF69B4';
+  ctx.fillRect(x, y, w, 2);
+  // body
+  ctx.fillStyle = '#1a0a2e';
+  ctx.fillRect(x, y + 2, w, 5);
+  // cyan accent line at bottom
+  ctx.fillStyle = '#00E5FF';
+  ctx.fillRect(x, y + 6, w, 1);
+}
+
+function drawPlatformGraffitiWall(ctx, x, y, w) {
+  ctx.fillStyle = '#1e1e2e';
+  ctx.fillRect(x, y, w, 7);
+  ctx.fillStyle = '#2a2a3e';
+  ctx.fillRect(x, y, w, 2);
+  // random colored dots (seeded by x)
+  let sd = x | 0;
+  const colors = ['#FF2D8C','#00E5FF','#FFD700','#B388FF','#FF6B6B','#7CFC00'];
+  const dotCount = Math.floor(w / 12);
+  for (let i = 0; i < dotCount; i++) {
+    const r1 = sRand(sd); sd = r1.s;
+    const r2 = sRand(sd); sd = r2.s;
+    const r3 = sRand(sd); sd = r3.s;
+    const dx = x + r1.v * (w - 4) + 2;
+    const dy = y + r2.v * 4 + 1;
+    ctx.fillStyle = colors[Math.floor(r3.v * colors.length)];
+    ctx.fillRect(dx, dy, 2, 2);
+  }
+  // neon top
+  ctx.fillStyle = '#00E5FF';
+  ctx.fillRect(x, y, w, 1);
+}
+
+function drawPlatformSubwayRoof(ctx, x, y, w) {
+  ctx.fillStyle = '#3a3a4a';
+  ctx.fillRect(x, y, w, 7);
+  ctx.fillStyle = '#2a2a3a';
+  ctx.fillRect(x, y + 7, w, 1);
+  // rivets
+  ctx.fillStyle = '#888';
+  ctx.fillRect(x + 3, y + 2, 3, 3);
+  ctx.fillRect(x + w - 6, y + 2, 3, 3);
+  if (w > 80) ctx.fillRect(x + (w >> 1) - 1, y + 2, 3, 3);
+}
+
+function drawPlatform(ctx, plat) {
+  switch(plat.type) {
+    case 0: drawPlatformNeonLedge(ctx, plat.x, plat.y, plat.w); break;
+    case 1: drawPlatformGraffitiWall(ctx, plat.x, plat.y, plat.w); break;
+    case 2: drawPlatformSubwayRoof(ctx, plat.x, plat.y, plat.w); break;
+  }
+}
+
+function drawBoombox(ctx, x, y) {
+  ctx.fillStyle = '#222';
+  ctx.fillRect(x, y, 20, 11);
+  ctx.fillStyle = '#555';
+  ctx.fillRect(x + 1, y + 1, 18, 9);
+  // speakers
+  ctx.fillStyle = '#111';
+  ctx.fillRect(x + 2, y + 3, 5, 5);
+  ctx.fillRect(x + 13, y + 3, 5, 5);
+  // dials
+  ctx.fillStyle = '#c00';
+  ctx.fillRect(x + 8, y + 2, 2, 2);
+  ctx.fillRect(x + 8, y + 6, 2, 2);
+  // antenna
+  ctx.fillStyle = '#aaa';
+  ctx.fillRect(x + 17, y - 3, 1, 4);
+}
+
+function drawHydrant(ctx, x, y) {
+  // body
+  ctx.fillStyle = '#c0392b';
+  ctx.fillRect(x + 2, y + 2, 10, 12);
+  // top cap
+  ctx.fillStyle = '#e74c3c';
+  ctx.fillRect(x, y, 14, 3);
+  // base
+  ctx.fillStyle = '#a93226';
+  ctx.fillRect(x + 1, y + 14, 12, 3);
+  // side nubs
+  ctx.fillStyle = '#e74c3c';
+  ctx.fillRect(x - 2, y + 6, 3, 4);
+  ctx.fillRect(x + 13, y + 6, 3, 4);
+  // bolts
+  ctx.fillStyle = '#d4ac0d';
+  ctx.fillRect(x + 4, y + 5, 2, 2);
+  ctx.fillRect(x + 8, y + 5, 2, 2);
+}
+
+function drawSubwaySign(ctx, x, y, ch) {
+  // circle bg
+  ctx.fillStyle = '#1e3a5f';
+  ctx.beginPath();
+  ctx.arc(x + 10, y + 10, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#00E5FF';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  // letter
+  drawPixelText(ctx, ch, x + 7, y + 6, '#00E5FF', 2);
+}
+
+function drawGoldChainIcon(ctx, x, y, size) {
+  const s = size || 14;
+  ctx.fillStyle = '#FFD700';
+  // simple chain links
+  ctx.fillRect(x, y + s*0.3, s*0.3, s*0.4);
+  ctx.fillRect(x + s*0.35, y, s*0.3, s*0.4);
+  ctx.fillRect(x + s*0.35, y + s*0.6, s*0.3, s*0.4);
+  ctx.fillRect(x + s*0.7, y + s*0.3, s*0.3, s*0.4);
+  ctx.fillStyle = '#B8860B';
+  ctx.fillRect(x + s*0.15, y + s*0.3, s*0.1, s*0.4);
+  ctx.fillRect(x + s*0.5, y + s*0.15, s*0.1, s*0.2);
+  ctx.fillRect(x + s*0.5, y + s*0.65, s*0.1, s*0.2);
+  ctx.fillRect(x + s*0.85, y + s*0.3, s*0.1, s*0.4);
+}
+
+// ─── §10 PLAYER SPRITE ──────────────────────────────────────────────────────
+// Pixel colors
+const PC = {
+  skin: '#D2A679', shirt: '#FFFFFF', chain: '#FFD700', chainSh: '#B8860B',
+  pants: '#2c3e50', shoes: '#1abc9c', hair: '#2c2c2c', box: '#333', boxD: '#555'
+};
+
+function drawPlayerIdle(ctx, px, py) {
+  // hair
+  ctx.fillStyle = PC.hair;
+  ctx.fillRect(px+4, py, 8, 3);
+  // head
+  ctx.fillStyle = PC.skin;
+  ctx.fillRect(px+4, py+3, 8, 5);
+  // chain
+  ctx.fillStyle = PC.chain;
+  ctx.fillRect(px+5, py+7, 6, 2);
+  ctx.fillStyle = PC.chainSh;
+  ctx.fillRect(px+7, py+9, 2, 2);
+  // shirt / torso
+  ctx.fillStyle = PC.shirt;
+  ctx.fillRect(px+3, py+8, 10, 6);
+  // boombox on left shoulder
+  ctx.fillStyle = PC.box;
+  ctx.fillRect(px, py+5, 4, 6);
+  ctx.fillStyle = PC.boxD;
+  ctx.fillRect(px+1, py+6, 2, 2);
+  // arms
+  ctx.fillStyle = PC.skin;
+  ctx.fillRect(px+2, py+10, 2, 4);   // left arm (holding box)
+  ctx.fillRect(px+12, py+10, 2, 5);  // right arm
+  // pants
+  ctx.fillStyle = PC.pants;
+  ctx.fillRect(px+4, py+14, 3, 5);
+  ctx.fillRect(px+9, py+14, 3, 5);
+  // shoes
+  ctx.fillStyle = PC.shoes;
+  ctx.fillRect(px+3, py+19, 5, 2);
+  ctx.fillRect(px+8, py+19, 5, 2);
+}
+
+function drawPlayerRunL(ctx, px, py) {
+  ctx.fillStyle = PC.hair;
+  ctx.fillRect(px+4, py, 8, 3);
+  ctx.fillStyle = PC.skin;
+  ctx.fillRect(px+4, py+3, 8, 5);
+  ctx.fillStyle = PC.chain;
+  ctx.fillRect(px+5, py+7, 6, 2);
+  ctx.fillStyle = PC.chainSh;
+  ctx.fillRect(px+7, py+9, 2, 2);
+  ctx.fillStyle = PC.shirt;
+  ctx.fillRect(px+3, py+8, 10, 6);
+  // boombox
+  ctx.fillStyle = PC.box;
+  ctx.fillRect(px, py+5, 4, 6);
+  ctx.fillStyle = PC.boxD;
+  ctx.fillRect(px+1, py+6, 2, 2);
+  // arms strided
+  ctx.fillStyle = PC.skin;
+  ctx.fillRect(px+1, py+9, 2, 5);    // left arm forward
+  ctx.fillRect(px+13, py+11, 2, 4);  // right arm back
+  // left leg forward
+  ctx.fillStyle = PC.pants;
+  ctx.fillRect(px+2, py+14, 3, 6);
+  // right leg back
+  ctx.fillRect(px+10, py+14, 3, 5);
+  // shoes
+  ctx.fillStyle = PC.shoes;
+  ctx.fillRect(px+1, py+20, 5, 2);
+  ctx.fillRect(px+9, py+19, 5, 2);
+}
+
+function drawPlayerRunR(ctx, px, py) {
+  ctx.fillStyle = PC.hair;
+  ctx.fillRect(px+4, py, 8, 3);
+  ctx.fillStyle = PC.skin;
+  ctx.fillRect(px+4, py+3, 8, 5);
+  ctx.fillStyle = PC.chain;
+  ctx.fillRect(px+5, py+7, 6, 2);
+  ctx.fillStyle = PC.chainSh;
+  ctx.fillRect(px+7, py+9, 2, 2);
+  ctx.fillStyle = PC.shirt;
+  ctx.fillRect(px+3, py+8, 10, 6);
+  // boombox
+  ctx.fillStyle = PC.box;
+  ctx.fillRect(px, py+6, 4, 6);
+  ctx.fillStyle = PC.boxD;
+  ctx.fillRect(px+1, py+7, 2, 2);
+  // arms
+  ctx.fillStyle = PC.skin;
+  ctx.fillRect(px+1, py+11, 2, 4);   // left arm back
+  ctx.fillRect(px+13, py+9, 2, 5);   // right arm forward
+  // right leg forward
+  ctx.fillStyle = PC.pants;
+  ctx.fillRect(px+10, py+14, 3, 6);
+  // left leg back
+  ctx.fillRect(px+3, py+14, 3, 5);
+  // shoes
+  ctx.fillStyle = PC.shoes;
+  ctx.fillRect(px+9, py+20, 5, 2);
+  ctx.fillRect(px+2, py+19, 5, 2);
+}
+
+function drawPlayerJump(ctx, px, py) {
+  ctx.fillStyle = PC.hair;
+  ctx.fillRect(px+4, py, 8, 3);
+  ctx.fillStyle = PC.skin;
+  ctx.fillRect(px+4, py+3, 8, 5);
+  ctx.fillStyle = PC.chain;
+  ctx.fillRect(px+5, py+7, 6, 2);
+  ctx.fillStyle = PC.chainSh;
+  ctx.fillRect(px+7, py+9, 2, 2);
+  ctx.fillStyle = PC.shirt;
+  ctx.fillRect(px+3, py+8, 10, 6);
+  // boombox held up
+  ctx.fillStyle = PC.box;
+  ctx.fillRect(px-1, py+3, 5, 5);
+  ctx.fillStyle = PC.boxD;
+  ctx.fillRect(px, py+4, 2, 2);
+  // arms out/up
+  ctx.fillStyle = PC.skin;
+  ctx.fillRect(px+1, py+8, 2, 3);
+  ctx.fillRect(px+13, py+8, 2, 3);
+  // legs tucked
+  ctx.fillStyle = PC.pants;
+  ctx.fillRect(px+3, py+14, 4, 4);
+  ctx.fillRect(px+9, py+14, 4, 4);
+  // shoes tucked
+  ctx.fillStyle = PC.shoes;
+  ctx.fillRect(px+2, py+17, 5, 2);
+  ctx.fillRect(px+9, py+17, 5, 2);
+}
+
+function drawPlayer(ctx, player) {
+  const px = player.x - cameraX;
+  const py = player.y;
+  // invuln flash
+  if (player.invulnTimer > 0 && Math.floor(player.invulnTimer / 4) % 2 === 0) return;
+  if (player.isJumping) {
+    drawPlayerJump(ctx, px, py);
+  } else {
+    const f = Math.floor(player.animTick / 8) % 2;
+    if (player.moving) {
+      f === 0 ? drawPlayerRunL(ctx, px, py) : drawPlayerRunR(ctx, px, py);
+    } else {
+      drawPlayerIdle(ctx, px, py);
+    }
+  }
+}
+
+// ─── §11 ENEMY SPRITE + AI ──────────────────────────────────────────────────
+const EC = { skin: '#E8C39E', jacket: '#E63946', pants: '#2c3e50', shoes: '#f39c12', hair: '#1a1a1a' };
+
+function drawEnemyA(ctx, ex, ey) {
+  // hair / hat
+  ctx.fillStyle = EC.hair;
+  ctx.fillRect(ex+3, ey, 10, 2);
+  ctx.fillStyle = '#c0392b';
+  ctx.fillRect(ex+2, ey+1, 12, 2);
+  // head
+  ctx.fillStyle = EC.skin;
+  ctx.fillRect(ex+4, ey+3, 8, 5);
+  // jacket torso
+  ctx.fillStyle = EC.jacket;
+  ctx.fillRect(ex+3, ey+8, 10, 6);
+  // arms
+  ctx.fillStyle = EC.skin;
+  ctx.fillRect(ex+1, ey+9, 2, 5);
+  ctx.fillRect(ex+13, ey+11, 2, 4);
+  // pants - left forward
+  ctx.fillStyle = EC.pants;
+  ctx.fillRect(ex+2, ey+14, 3, 6);
+  ctx.fillRect(ex+10, ey+14, 3, 5);
+  // shoes
+  ctx.fillStyle = EC.shoes;
+  ctx.fillRect(ex+1, ey+20, 5, 2);
+  ctx.fillRect(ex+9, ey+19, 5, 2);
+}
+
+function drawEnemyB(ctx, ex, ey) {
+  ctx.fillStyle = EC.hair;
+  ctx.fillRect(ex+3, ey, 10, 2);
+  ctx.fillStyle = '#c0392b';
+  ctx.fillRect(ex+2, ey+1, 12, 2);
+  ctx.fillStyle = EC.skin;
+  ctx.fillRect(ex+4, ey+3, 8, 5);
+  ctx.fillStyle = EC.jacket;
+  ctx.fillRect(ex+3, ey+8, 10, 6);
+  ctx.fillStyle = EC.skin;
+  ctx.fillRect(ex+1, ey+11, 2, 4);
+  ctx.fillRect(ex+13, ey+9, 2, 5);
+  // right leg forward
+  ctx.fillStyle = EC.pants;
+  ctx.fillRect(ex+10, ey+14, 3, 6);
+  ctx.fillRect(ex+3, ey+14, 3, 5);
+  ctx.fillStyle = EC.shoes;
+  ctx.fillRect(ex+9, ey+20, 5, 2);
+  ctx.fillRect(ex+2, ey+19, 5, 2);
+}
+
+function drawEnemy(ctx, enemy) {
+  const ex = enemy.x - cameraX;
+  const ey = enemy.y;
+  if (enemy.dir < 0) {
+    ctx.save();
+    ctx.translate(ex + 16, 0);
+    ctx.scale(-1, 1);
+    const f = Math.floor(enemy.animTick / 12) % 2;
+    f === 0 ? drawEnemyA(ctx, 0, ey) : drawEnemyB(ctx, 0, ey);
+    ctx.restore();
+  } else {
+    const f = Math.floor(enemy.animTick / 12) % 2;
+    f === 0 ? drawEnemyA(ctx, ex, ey) : drawEnemyB(ctx, ex, ey);
+  }
+}
+
+function updateEnemy(enemy) {
+  enemy.x += enemy.dir * ENEMY_SPEED;
+  enemy.animTick++;
+  if (enemy.x < enemy.platLeft) { enemy.x = enemy.platLeft; enemy.dir = 1; }
+  if (enemy.x + 16 > enemy.platRight) { enemy.x = enemy.platRight - 16; enemy.dir = -1; }
+}
+
+// ─── §12 COIN SPRITE ────────────────────────────────────────────────────────
+function drawCoin(ctx, x, y) {
+  // outer ring
+  ctx.fillStyle = '#FFD700';
+  ctx.fillRect(x+2, y, 8, 2);
+  ctx.fillRect(x, y+2, 2, 8);
+  ctx.fillRect(x+10, y+2, 2, 8);
+  ctx.fillRect(x+2, y+10, 8, 2);
+  // fill
+  ctx.fillStyle = '#DAA520';
+  ctx.fillRect(x+2, y+2, 8, 8);
+  // chain link pattern
+  ctx.fillStyle = '#FFD700';
+  ctx.fillRect(x+3, y+3, 2, 2);
+  ctx.fillRect(x+7, y+3, 2, 2);
+  ctx.fillRect(x+5, y+6, 2, 2);
+  ctx.fillStyle = '#B8860B';
+  ctx.fillRect(x+3, y+7, 2, 2);
+  ctx.fillRect(x+7, y+7, 2, 2);
+}
+
+// ─── §13 WORLD / CHUNK GENERATOR ────────────────────────────────────────────
+let chunks = [];
+let lastPlatEnd = { x: 200, y: 320 };
+let cameraX = 0;
+
+function getDifficulty() {
+  if (!game) return 0;
+  return Math.min(1, game.distance / 18000);
+}
+
+function generateChunk(startX) {
+  const diff = getDifficulty();
+  let sd = startX | 0;
+  const chunk = { startX: startX, platforms: [], enemies: [], coins: [], props: [] };
+
+  // platform count
+  const r0 = sRand(sd); sd = r0.s;
+  const platCount = 3 + Math.floor(r0.v * 3); // 3-5
+
+  let prevEnd = { x: lastPlatEnd.x, y: lastPlatEnd.y };
+
+  for (let i = 0; i < platCount; i++) {
+    const r1 = sRand(sd); sd = r1.s;
+    const r2 = sRand(sd); sd = r2.s;
+    const r3 = sRand(sd); sd = r3.s;
+    const r4 = sRand(sd); sd = r4.s;
+
+    // gap
+    const minGap = 38 + diff * 55;
+    const maxGap = 70 + diff * 70;
+    const gap = minGap + r1.v * (maxGap - minGap);
+
+    // width
+    const minW = 55 - diff * 22;
+    const maxW = 140 - diff * 40;
+    const w = Math.max(40, minW + r2.v * (maxW - minW));
+
+    // x position
+    const px = prevEnd.x + gap;
+
+    // y position: within jump range of previous
+    // max up = 144px (vy^2 / 2g), max down = 160px
+    const maxUp = 130;
+    const maxDown = 150;
+    const sineY = 290 + Math.sin(px * 0.012) * 55 + Math.sin(px * 0.035) * 25;
+    let py = sineY;
+    // clamp to reachable from prev
+    if (py < prevEnd.y - maxUp) py = prevEnd.y - maxUp;
+    if (py > prevEnd.y + maxDown) py = prevEnd.y + maxDown;
+    // clamp to screen bounds
+    if (py < 80)  py = 80;
+    if (py > 370) py = 370;
+
+    const type = Math.floor(r3.v * 3); // 0=neon, 1=graffiti, 2=subway
+    const platH = 8;
+
+    chunk.platforms.push({ x: px, y: py, w: w, h: platH, type: type, seed: (px * 31 + py * 17) | 0 });
+
+    // enemy on this platform?
+    if (w > 75) {
+      const rEnemy = sRand(sd); sd = rEnemy.s;
+      const enemyProb = Math.min(0.65, game ? game.distance / 14000 : 0);
+      if (rEnemy.v < enemyProb) {
+        const eRand = sRand(sd); sd = eRand.s;
+        chunk.enemies.push({
+          x: px + 10 + eRand.v * (w - 30),
+          y: py - 24,
+          w: 16, h: 24,
+          platLeft: px + 2,
+          platRight: px + w - 2,
+          dir: 1,
+          frame: 0,
+          animTick: 0,
+          alive: true
+        });
+      }
+    } else {
+      const rSkip = sRand(sd); sd = rSkip.s; // keep PRNG in sync
+    }
+
+    // coins
+    const rCoinCount = sRand(sd); sd = rCoinCount.s;
+    const coinCount = 1 + Math.floor(rCoinCount.v * (3 - diff * 1.5));
+    for (let c = 0; c < coinCount; c++) {
+      const rCoin = sRand(sd); sd = rCoin.s;
+      const cx = px + 8 + rCoin.v * (w - 20);
+      chunk.coins.push({
+        x: cx,
+        y: py - 28,
+        baseY: py - 28,
+        bobPhase: rCoin.v * Math.PI * 2,
+        collected: false
+      });
+    }
+
+    prevEnd = { x: px + w, y: py };
+  }
+
+  // update global last platform end
+  lastPlatEnd = { x: prevEnd.x, y: prevEnd.y };
+
+  // props (visual only)
+  const rPropCount = sRand(sd); sd = rPropCount.s;
+  const propCount = 2 + Math.floor(rPropCount.v * 3);
+  for (let p = 0; p < propCount; p++) {
+    const rp1 = sRand(sd); sd = rp1.s;
+    const rp2 = sRand(sd); sd = rp2.s;
+    const rp3 = sRand(sd); sd = rp3.s;
+    const propTypes = [0,1,2,3]; // 0=boombox, 1=hydrant, 2=subwaySign, 3=flyer
+    const pType = propTypes[Math.floor(rp1.v * propTypes.length)];
+    const pLayer = rp2.v < 0.4 ? 2 : 3; // mid or near
+    const pX = startX + rp3.v * CHUNK_WIDTH;
+    const pY = pLayer === 2 ? 300 + Math.sin(pX * 0.02) * 40 : 360;
+    chunk.props.push({ x: pX, y: pY, type: pType, layer: pLayer });
+  }
+
+  return chunk;
+}
+
+function ensureChunksAhead() {
+  const targetEnd = cameraX + GAME_W + CHUNK_WIDTH * 2;
+  while (chunks.length === 0 || (chunks[chunks.length - 1].startX + CHUNK_WIDTH) < targetEnd) {
+    const startX = chunks.length === 0 ? 0 : chunks[chunks.length - 1].startX + CHUNK_WIDTH;
+    chunks.push(generateChunk(startX));
+  }
+}
+
+function cullChunksBehind() {
+  while (chunks.length > 0 && chunks[0].startX + CHUNK_WIDTH < cameraX - CHUNK_WIDTH) {
+    chunks.shift();
+  }
+}
+
+function getAllPlatforms() {
+  const plats = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const ch = chunks[i];
+    for (let j = 0; j < ch.platforms.length; j++) {
+      plats.push(ch.platforms[j]);
+    }
+  }
+  return plats;
+}
+
+function getAllEnemies() {
+  const list = [];
+  for (let i = 0; i < chunks.length; i++) {
+    for (let j = 0; j < chunks[i].enemies.length; j++) {
+      if (chunks[i].enemies[j].alive) list.push(chunks[i].enemies[j]);
+    }
+  }
+  return list;
+}
+
+function getAllCoins() {
+  const list = [];
+  for (let i = 0; i < chunks.length; i++) {
+    for (let j = 0; j < chunks[i].coins.length; j++) {
+      if (!chunks[i].coins[j].collected) list.push(chunks[i].coins[j]);
+    }
+  }
+  return list;
+}
+
+// ─── §14 PARALLAX BACKGROUNDS ───────────────────────────────────────────────
+// Skyline strip (generated once)
+let skylinerGenerated = false;
+let skylineData = []; // array of {x, w, h, windows:[{x,y,color},...]}
+
+function generateSkylineStrip() {
+  if (skylinerGenerated) return;
+  skylinerGenerated = true;
+  let sx = 0;
+  const winColors = ['#FF2D8C','#00E5FF','#FFD700','#FF6B6B','#B388FF'];
+  let sd = 42;
+  while (sx < 2500) {
+    const r1 = sRand(sd); sd = r1.s;
+    const r2 = sRand(sd); sd = r2.s;
+    const bw = 20 + Math.floor(r1.v * 40);
+    const bh = 50 + Math.floor(r2.v * 90);
+    const wins = [];
+    // generate windows
+    for (let wy = 6; wy < bh - 4; wy += 8 + Math.floor(Math.random() * 4)) {
+      for (let wx = 4; wx < bw - 4; wx += 6 + Math.floor(Math.random() * 3)) {
+        const rw = sRand(sd); sd = rw.s;
+        if (rw.v < 0.55) { // 55% chance window is lit
+          const rc = sRand(sd); sd = rc.s;
+          wins.push({ x: wx, y: wy, color: winColors[Math.floor(rc.v * winColors.length)] });
+        } else {
+          const rskip = sRand(sd); sd = rskip.s;
+        }
+      }
+    }
+    skylineData.push({ x: sx, w: bw, h: bh, windows: wins });
+    sx += bw + 2 + Math.floor(Math.random() * 8);
+  }
+}
+
+function drawSky(ctx) {
+  const grad = ctx.createLinearGradient(0, 0, 0, GAME_H);
+  grad.addColorStop(0, '#050510');
+  grad.addColorStop(0.6, '#0d0d2a');
+  grad.addColorStop(1, '#2a0a4a');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, GAME_W, GAME_H);
+}
+
+function drawSkyline(ctx) {
+  generateSkylineStrip();
+  const parallax = 0.12;
+  const offsetX = cameraX * parallax;
+  const stripW = 2500;
+  // tile the strip
+  const tileOffset = offsetX % stripW;
+
+  for (let tile = -1; tile <= 1; tile++) {
+    const baseX = -tileOffset + tile * stripW;
+    for (let i = 0; i < skylineData.length; i++) {
+      const b = skylineData[i];
+      const bx = baseX + b.x;
+      const by = GAME_H - 140 - b.h; // buildings sit on a horizon line
+
+      if (bx + b.w < -10 || bx > GAME_W + 10) continue;
+
+      // building silhouette
+      ctx.fillStyle = '#0d0d1f';
+      ctx.fillRect(bx, by, b.w, b.h + 140);
+
+      // windows
+      for (let w = 0; w < b.windows.length; w++) {
+        const win = b.windows[w];
+        ctx.fillStyle = win.color;
+        ctx.globalAlpha = 0.7;
+        ctx.fillRect(bx + win.x, by + win.y, 3, 3);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+function drawMidground(ctx) {
+  const parallax = 0.35;
+  for (let i = 0; i < chunks.length; i++) {
+    const ch = chunks[i];
+    for (let j = 0; j < ch.props.length; j++) {
+      const prop = ch.props[j];
+      if (prop.layer !== 2) continue;
+      const dx = prop.x - cameraX * parallax;
+      if (dx + 40 < 0 || dx > GAME_W + 40) continue;
+      switch(prop.type) {
+        case 0: drawBoombox(ctx, dx, prop.y - 11); break;
+        case 3: // flyer
+          ctx.fillStyle = '#1a1a2e';
+          ctx.fillRect(dx, prop.y - 18, 16, 22);
+          ctx.fillStyle = '#FF2D8C';
+          ctx.fillRect(dx + 2, prop.y - 16, 12, 2);
+          ctx.fillStyle = '#00E5FF';
+          ctx.fillRect(dx + 2, prop.y - 12, 8, 2);
+          ctx.fillRect(dx + 2, prop.y - 8, 10, 2);
+          ctx.fillRect(dx + 2, prop.y - 4, 6, 2);
+          break;
+      }
+    }
+  }
+}
+
+function drawNearground(ctx) {
+  const parallax = 0.75;
+  for (let i = 0; i < chunks.length; i++) {
+    const ch = chunks[i];
+    for (let j = 0; j < ch.props.length; j++) {
+      const prop = ch.props[j];
+      if (prop.layer !== 3) continue;
+      const dx = prop.x - cameraX * parallax;
+      if (dx + 250 < 0 || dx > GAME_W + 50) continue;
+      switch(prop.type) {
+        case 1: drawHydrant(ctx, dx, prop.y - 17); break;
+        case 2: drawSubwaySign(ctx, dx, prop.y - 24, 'A'); break;
+        case 0: drawBoombox(ctx, dx, prop.y - 11); break;
+      }
+    }
+  }
+  // ground line
+  ctx.fillStyle = '#0d0d2a';
+  ctx.fillRect(0, GAME_H - 30, GAME_W, 30);
+  ctx.fillStyle = '#1a0a3a';
+  ctx.fillRect(0, GAME_H - 31, GAME_W, 2);
+}
+
+// ─── §15 COLLISION SYSTEM ───────────────────────────────────────────────────
+let player = null;
+let game = null;
+
+function checkPlatformCollision() {
+  if (!player) return;
+  const plats = getAllPlatforms();
+  player.isGrounded = false;
+
+  for (let i = 0; i < plats.length; i++) {
+    const p = plats[i];
+    // top-only: was above, now at or below
+    if (player.prevY + PLAYER_H <= p.y &&
+        player.y + PLAYER_H >= p.y &&
+        player.x + PLAYER_W > p.x &&
+        player.x < p.x + p.w) {
+      player.y = p.y - PLAYER_H;
+      player.vy = 0;
+      player.isGrounded = true;
+      // landing confetti
+      if (player.isJumping) {
+        emitLandingConfetti(player.x + PLAYER_W * 0.5, player.y + PLAYER_H);
+      }
+      player.isJumping = false;
+      player.hasDoubleJumped = false;
+      break;
+    }
+  }
+}
+
+function checkEnemyCollision() {
+  if (!player || !game) return;
+  if (player.invulnTimer > 0) return;
+  const enemies = getAllEnemies();
+
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    // AABB
+    const px = player.x, py = player.y;
+    const ex = e.x, ey = e.y;
+    if (px + PLAYER_W > ex && px < ex + 16 && py + PLAYER_H > ey && py < ey + 24) {
+      // stomp check: player moving down AND player bottom is in enemy top zone
+      if (player.vy > 0 && (py + PLAYER_H) <= ey + 6 && (py + PLAYER_H) >= ey) {
+        // STOMP
+        e.alive = false;
+        player.vy = -8;
+        player.isJumping = true;
+        game.rep += 100;
+        emitCoinBurst(ex + 8, ey);
+        triggerShake(3);
+        audioPlayCoin();
+      } else {
+        // HIT
+        game.lives--;
+        player.invulnTimer = 50;
+        triggerShake(5);
+        if (game.lives <= 0) {
+          game.lives = 0;
+          transitionToGameOver();
+        }
+      }
+    }
+  }
+}
+
+function checkCoinCollision() {
+  if (!player || !game) return;
+  const coins = getAllCoins();
+  const pcx = player.x + PLAYER_W * 0.5;
+  const pcy = player.y + PLAYER_H * 0.5;
+
+  for (let i = 0; i < coins.length; i++) {
+    const c = coins[i];
+    const ccx = c.x + 6;
+    const ccy = c.y + 6;
+    const dx = pcx - ccx, dy = pcy - ccy;
+    if (dx * dx + dy * dy < 24 * 24) {
+      c.collected = true;
+      game.rep += COIN_VALUE;
+      audioPlayCoin();
+      emitCoinBurst(ccx, ccy);
+      triggerShake(2);
+    }
+  }
+}
+
+// ─── §16 PLAYER PHYSICS ─────────────────────────────────────────────────────
+function updatePlayerPhysics() {
+  if (!player || !game) return;
+
+  // store previous Y for top-only collision
+  player.prevY = player.y;
+
+  // horizontal: auto-scroll
+  player.x += AUTO_SCROLL_SPEED;
+  if (input.left)  player.x -= MOVE_SPEED;
+  if (input.right) player.x += MOVE_SPEED;
+
+  // clamp: cannot go behind camera
+  if (player.x < cameraX) player.x = cameraX;
+
+  // movement flag for animation
+  player.moving = input.left || input.right;
+
+  // invuln countdown
+  if (player.invulnTimer > 0) player.invulnTimer--;
+
+  // gravity
+  player.vy += GRAVITY;
+
+  // was grounded last frame?
+  const wasGrounded = player.wasGrounded;
+  player.wasGrounded = player.isGrounded;
+
+  // coyote: started when we were grounded and now we aren't
+  if (wasGrounded && !player.isGrounded) {
+    player.coyoteTimer = COYOTE_FRAMES;
+  }
+  if (player.coyoteTimer > 0) player.coyoteTimer--;
+
+  // jump buffer: set when jump pressed while in air
+  if (input.jumpPressed && !player.isGrounded) {
+    player.jumpBufferTimer = JUMP_BUFFER_FRAMES;
+  }
+  if (player.jumpBufferTimer > 0) player.jumpBufferTimer--;
+
+  // JUMP LOGIC
+  const canJumpFromGround = player.isGrounded || player.coyoteTimer > 0;
+  const wantJump = input.jumpPressed || (player.jumpBufferTimer > 0 && player.isGrounded);
+
+  if (wantJump && canJumpFromGround) {
+    // first jump
+    player.vy = JUMP_VY;
+    player.isGrounded = false;
+    player.isJumping = true;
+    player.coyoteTimer = 0;
+    player.jumpBufferTimer = 0;
+    player.hasDoubleJumped = false;
+    audioPlayJump();
+  } else if (input.jumpPressed && !player.isGrounded && !player.hasDoubleJumped && game.doubleJumpUnlocked && player.isJumping) {
+    // double jump
+    player.vy = DOUBLE_JUMP_VY;
+    player.hasDoubleJumped = true;
+    player.jumpBufferTimer = 0;
+    audioPlayJump();
+    emitDoubleJumpBurst(player.x + PLAYER_W * 0.5, player.y + PLAYER_H);
+  }
+
+  // apply vertical velocity
+  player.y += player.vy;
+
+  // camera follows player
+  cameraX = player.x - 150;
+
+  // fall death
+  if (player.y > GAME_H + 60) {
+    game.lives--;
+    triggerShake(5);
+    if (game.lives <= 0) {
+      game.lives = 0;
+      transitionToGameOver();
+    } else {
+      // respawn
+      player.x = cameraX + 80;
+      player.y = 80;
+      player.vy = 0;
+      player.prevY = 80;
+      player.isGrounded = false;
+      player.isJumping = true;
+      player.invulnTimer = 60;
+      player.hasDoubleJumped = false;
+    }
+  }
+
+  player.animTick++;
+}
+
+// ─── §17 SCORING / REP / UNLOCK ─────────────────────────────────────────────
+let lastBeatDropDist = 0;
+
+function updateScoring() {
+  if (!game) return;
+  // distance-based rep
+  game.rep += AUTO_SCROLL_SPEED / 10;
+  game.distance += AUTO_SCROLL_SPEED;
+
+  // meter threshold grows
+  game.meterThreshold = 500 + Math.floor(game.distance / 2500) * 150;
+  game.meterFill = game.rep % game.meterThreshold;
+
+  // meter full flash
+  const prevFill = (game.rep - AUTO_SCROLL_SPEED / 10) % game.meterThreshold;
+  if (game.meterFill < prevFill && game.meterFill < 5) {
+    game.meterFlash = 14;
+  }
+  if (game.meterFlash > 0) game.meterFlash--;
+
+  // double jump unlock
+  if (game.rep >= DOUBLE_JUMP_UNLOCK_REP && !game.doubleJumpUnlocked) {
+    game.doubleJumpUnlocked = true;
+    game.unlockFlashTimer = 140;
+    triggerShake(4);
+    audioPlayBeatDrop();
+  }
+  if (game.unlockFlashTimer > 0) game.unlockFlashTimer--;
+
+  // life lost anim
+  if (game.lifeLostAnim > 0) game.lifeLostAnim--;
+
+  // hint timer
+  if (game.hintTimer < 400) game.hintTimer++;
+
+  // beat drops every 6000 distance
+  if (game.distance - lastBeatDropDist >= 6000) {
+    lastBeatDropDist = game.distance;
+    audioPlayBeatDrop();
+    triggerShake(4);
+    bpm = Math.min(180, bpm + 4);
+  }
+
+  // difficulty also bumps BPM smoothly
+  bpm = 118 + getDifficulty() * 50;
+}
+
+// ─── §18 MAIN GAME LOOP ─────────────────────────────────────────────────────
+let lastTime = 0;
+
+function gameLoop(timestamp) {
+  if (!lastTime) lastTime = timestamp;
+  const dt = timestamp - lastTime;
+  lastTime = timestamp;
+  frameCounter++;
+
+  // sync touch state into input flags every frame
+  if (isTouchDevice) syncTouchInput();
+
+  // rising edges
+  input.jumpPressed  = input.jump  && !prevInput.jump;
+  input.enterPressed = input.enter && !prevInput.enter;
+  input.upPressed    = input.up    && !prevInput.up;
+  input.downPressed  = input.down  && !prevInput.down;
+  input.leftPressed  = input.left  && !prevInput.left;
+  input.rightPressed = input.right && !prevInput.right;
+  prevInput.jump  = input.jump;
+  prevInput.enter = input.enter;
+  prevInput.up    = input.up;
+  prevInput.down  = input.down;
+  prevInput.left  = input.left;
+  prevInput.right = input.right;
+
+  // state dispatch
+  if (gameState === STATE.TITLE) {
+    updateTitle();
+    drawTitle();
+  } else if (gameState === STATE.PLAYING) {
+    updatePlaying();
+    drawPlaying();
+  } else if (gameState === STATE.GAMEOVER) {
+    updateGameOver();
+    drawGameOver();
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+function updatePlaying() {
+  updateSequencer();
+  updatePlayerPhysics();
+  ensureChunksAhead();
+  cullChunksBehind();
+
+  // update enemies
+  const enemies = getAllEnemies();
+  for (let i = 0; i < enemies.length; i++) updateEnemy(enemies[i]);
+
+  // update coin bobs
+  for (let ci = 0; ci < chunks.length; ci++) {
+    const ch = chunks[ci];
+    for (let cj = 0; cj < ch.coins.length; cj++) {
+      if (!ch.coins[cj].collected) ch.coins[cj].bobPhase += 0.07;
+    }
+  }
+
+  checkPlatformCollision();
+  checkEnemyCollision();
+  checkCoinCollision();
+  updateParticles();
+  updateScoring();
+
+  // shake decay
+  shakeAmount *= 0.88;
+  if (shakeAmount < 0.1) shakeAmount = 0;
+}
+
+function drawPlaying() {
+  ctx.clearRect(0, 0, GAME_W, GAME_H);
+
+  // shake offset
+  const shake = getShakeOffset();
+
+  ctx.save();
+  ctx.translate(shake.x, shake.y);
+
+  // layer 0: sky
+  drawSky(ctx);
+
+  // layer 1: distant skyline
+  drawSkyline(ctx);
+
+  // layer 2: midground props
+  drawMidground(ctx);
+
+  // layer 3: nearground
+  drawNearground(ctx);
+
+  // platforms
+  const plats = getAllPlatforms();
+  for (let i = 0; i < plats.length; i++) {
+    const p = plats[i];
+    const dx = p.x - cameraX;
+    if (dx + p.w < -10 || dx > GAME_W + 10) continue;
+    drawPlatform(ctx, { x: dx, y: p.y, w: p.w, h: p.h, type: p.type, seed: p.seed });
+  }
+
+  // enemies
+  const enemies = getAllEnemies();
+  for (let i = 0; i < enemies.length; i++) drawEnemy(ctx, enemies[i]);
+
+  // coins
+  const coins = getAllCoins();
+  for (let i = 0; i < coins.length; i++) {
+    const c = coins[i];
+    const dx = c.x - cameraX;
+    if (dx + 14 < -5 || dx > GAME_W + 5) continue;
+    const dy = c.baseY + Math.sin(c.bobPhase) * 4;
+    drawCoin(ctx, dx, dy);
+  }
+
+  // player
+  drawPlayer(ctx, player);
+
+  // particles
+  drawParticles(ctx);
+
+  ctx.restore(); // ← SHAKE ENDS HERE
+
+  // ─── HUD (outside shake) ────────────────────────────────────────────────
+  drawHUD();
+
+  // touch controls
+  if (isTouchDevice) drawTouchControls();
+}
+
+// ─── §19 TITLE SCREEN ───────────────────────────────────────────────────────
+let titleTime = 0;
+
+const crewNames = [
+  'MIKE D','FRESH KID','BYTES','VINYL','PHARAOH',
+  'GHOST','NEON','JADE','SPARK','CHROME',
+  'FLOW','STING','PIXEL','DUKE','RAZE',
+  'KODA','SYNTH','BOLT','LUNA','ZERO'
+];
+
+function updateTitle() {
+  titleTime++;
+  if (input.jumpPressed || input.enterPressed) {
+    transitionToPlaying();
+  }
+}
+
+function drawTitle() {
+  ctx.clearRect(0, 0, GAME_W, GAME_H);
+
+  // sky bg
+  drawSky(ctx);
+
+  // scanlines
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  for (let sy = 0; sy < GAME_H; sy += 4) {
+    ctx.fillRect(0, sy, GAME_W, 2);
+  }
+
+  // animated neon logo glow
+  const glowPulse = 8 + Math.sin(titleTime * 0.06) * 7;
+  ctx.save();
+  ctx.shadowColor = '#FF2D8C';
+  ctx.shadowBlur = glowPulse;
+  drawPixelText(ctx, 'STILL GOT IT', GAME_W * 0.5 - measurePixelText('STILL GOT IT', 5) * 0.5, 90, '#FF2D8C', 5);
+  ctx.restore();
+  // crisp layer
+  drawPixelText(ctx, 'STILL GOT IT', GAME_W * 0.5 - measurePixelText('STILL GOT IT', 5) * 0.5, 90, '#FF69B4', 5);
+
+  // COLLECTIVE
+  ctx.save();
+  ctx.shadowColor = '#B388FF';
+  ctx.shadowBlur = 6;
+  drawPixelText(ctx, 'COLLECTIVE', GAME_W * 0.5 - measurePixelText('COLLECTIVE', 3) * 0.5, 140, '#B388FF', 3);
+  ctx.restore();
+  drawPixelText(ctx, 'COLLECTIVE', GAME_W * 0.5 - measurePixelText('COLLECTIVE', 3) * 0.5, 140, '#C9A8FF', 3);
+
+  // "presents..."
+  drawPixelText(ctx, 'PRESENTS', GAME_W * 0.5 - measurePixelText('PRESENTS', 2) * 0.5, 175, '#666', 2);
+
+  // decorative boomboxes
+  drawBoombox(ctx, 60, 200);
+  drawBoombox(ctx, GAME_W - 85, 210);
+
+  // crew roster scroll
+  const scrollY = titleTime % 320;
+  for (let i = 0; i < crewNames.length; i++) {
+    const ny = 280 + i * 22 - scrollY;
+    if (ny < 250 || ny > GAME_H - 40) continue;
+    const alpha = 0.3 + 0.2 * Math.sin((titleTime + i * 15) * 0.08);
+    ctx.globalAlpha = alpha;
+    drawPixelText(ctx, crewNames[i], GAME_W * 0.5 - measurePixelText(crewNames[i], 2) * 0.5, ny, '#aaa', 2);
+  }
+  ctx.globalAlpha = 1;
+
+  // blink start prompt (mobile-aware)
+  const startPrompt = isTouchDevice ? 'TAP ANYWHERE TO START' : 'PRESS SPACE TO START';
+  const blinkOn = Math.floor(titleTime / 22) % 3 !== 2;
+  if (blinkOn) {
+    ctx.save();
+    ctx.shadowColor = '#00E5FF';
+    ctx.shadowBlur = 5;
+    drawPixelText(ctx, startPrompt, GAME_W * 0.5 - measurePixelText(startPrompt, 2) * 0.5, GAME_H - 60, '#00E5FF', 2);
+    ctx.restore();
+  }
+
+  // footer
+  drawPixelText(ctx, 'STILLGOTITCOLLECTIVE.COM', GAME_W * 0.5 - measurePixelText('STILLGOTITCOLLECTIVE.COM', 1) * 0.5, GAME_H - 20, '#444', 1);
+}
+
+// ─── §20 HUD OVERLAY ────────────────────────────────────────────────────────
+function drawHUD() {
+  if (!game) return;
+
+  // ── Rep Meter ──
+  const mX = 12, mY = 10;
+  drawPixelText(ctx, 'STILL GOT IT', mX, mY, '#FF2D8C', 2);
+  const barX = mX, barY = mY + 16, barW = 220, barH = 12;
+
+  // bar bg
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(barX, barY, barW, barH);
+  // bar border
+  ctx.strokeStyle = '#FF2D8C';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(barX, barY, barW, barH);
+
+  // bar fill
+  const fillRatio = game.meterThreshold > 0 ? game.meterFill / game.meterThreshold : 0;
+  const fillW = fillRatio * (barW - 2);
+  ctx.fillStyle = game.meterFlash > 0 ? '#FFFFFF' : '#00E5FF';
+  if (fillW > 0) ctx.fillRect(barX + 1, barY + 1, fillW, barH - 2);
+
+  // tick marks
+  ctx.fillStyle = '#333';
+  for (let t = 1; t < 5; t++) {
+    ctx.fillRect(barX + (barW * t / 5), barY, 1, barH);
+  }
+
+  // rep number
+  drawPixelText(ctx, String(Math.floor(game.rep)), barX + barW + 8, barY + 1, '#FFFFFF', 2);
+
+  // ── Lives ──
+  const livesX = GAME_W - 20 - LIVES_START * 22;
+  for (let i = 0; i < LIVES_START; i++) {
+    if (i >= game.lives) {
+      // lost life: draw faded
+      ctx.globalAlpha = 0.2;
+      drawGoldChainIcon(ctx, livesX + i * 22, 10, 16);
+      ctx.globalAlpha = 1;
+    } else {
+      drawGoldChainIcon(ctx, livesX + i * 22, 10, 16);
+    }
+  }
+
+  // ── Distance ──
+  drawPixelText(ctx, 'DIST ' + Math.floor(game.distance), GAME_W - 160, 32, '#999', 1);
+
+  // ── Double Jump Unlock Flash ──
+  if (game.unlockFlashTimer > 0) {
+    const alpha = Math.min(1, game.unlockFlashTimer / 20);
+    ctx.fillStyle = 'rgba(0,0,0,' + (0.55 * alpha) + ')';
+    ctx.fillRect(0, 0, GAME_W, GAME_H);
+    const pulse = 0.7 + Math.sin(frameCounter * 0.3) * 0.3;
+    ctx.globalAlpha = alpha * pulse;
+    ctx.save();
+    ctx.shadowColor = '#FFD700';
+    ctx.shadowBlur = 12;
+    drawPixelText(ctx, 'DOUBLE JUMP', GAME_W * 0.5 - measurePixelText('DOUBLE JUMP', 4) * 0.5, GAME_H * 0.5 - 40, '#FFD700', 4);
+    ctx.restore();
+    ctx.globalAlpha = alpha;
+    drawPixelText(ctx, 'UNLOCKED!', GAME_W * 0.5 - measurePixelText('UNLOCKED!', 3) * 0.5, GAME_H * 0.5 + 10, '#FFD700', 3);
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Mobile hint ──
+  if (isTouchDevice && game.hintTimer < 260) {
+    const hAlpha = game.hintTimer < 180 ? 0.7 : Math.max(0, 0.7 - (game.hintTimer - 180) / 80);
+    if (hAlpha > 0) {
+      ctx.globalAlpha = hAlpha;
+      drawPixelText(ctx, 'TAP LEFT/RIGHT TO MOVE | JUMP BUTTON', GAME_W * 0.5 - measurePixelText('TAP LEFT/RIGHT TO MOVE | JUMP BUTTON', 1) * 0.5, GAME_H - 18, '#999', 1);
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+// ─── §21 GAME OVER SCREEN ───────────────────────────────────────────────────
+let goPhase = 'display'; // 'display' | 'nameInput' | 'done'
+let goTimer = 0;
+let goName = [0, 0, 0]; // indices 0-25 for A-Z
+let goCursor = 0;
+let goIsNewHigh = false;
+
+function updateGameOver() {
+  goTimer++;
+
+  if (goPhase === 'display') {
+    if (goTimer > 80) {
+      if (game && game.rep > highScore.score) {
+        goIsNewHigh = true;
+        goPhase = 'nameInput';
+      } else {
+        goIsNewHigh = false;
+        goPhase = 'done';
+      }
+    }
+  } else if (goPhase === 'nameInput') {
+    // Up/Down cycle character
+    if (input.upPressed) {
+      goName[goCursor] = (goName[goCursor] + 1) % 26;
+    }
+    if (input.downPressed) {
+      goName[goCursor] = (goName[goCursor] + 25) % 26; // -1 mod 26
+    }
+    // Left/Right move cursor
+    if (input.leftPressed) {
+      goCursor = Math.max(0, goCursor - 1);
+    }
+    if (input.rightPressed) {
+      goCursor = Math.min(2, goCursor + 1);
+    }
+    // Enter confirms (NOT jump — ArrowUp sets both up and jump)
+    if (input.enterPressed) {
+      const name = goName.map(function(i) { return String.fromCharCode(65 + i); }).join('');
+      saveHighScore(game.rep, name);
+      highScore = { score: game.rep, name: name };
+      goPhase = 'done';
+    }
+  } else if (goPhase === 'done') {
+    if (input.enterPressed || input.jumpPressed) {
+      transitionToTitle();
+    }
+  }
+}
+
+function drawGameOver() {
+  // dark background
+  const grad = ctx.createLinearGradient(0, 0, 0, GAME_H);
+  grad.addColorStop(0, '#080810');
+  grad.addColorStop(1, '#150a25');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, GAME_W, GAME_H);
+
+  // scanlines
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  for (let sy = 0; sy < GAME_H; sy += 4) ctx.fillRect(0, sy, GAME_W, 2);
+
+  // GAME OVER title
+  const goGlow = 10 + Math.sin(goTimer * 0.1) * 4;
+  ctx.save();
+  ctx.shadowColor = '#FF2D8C';
+  ctx.shadowBlur = goGlow;
+  drawPixelText(ctx, 'GAME OVER', GAME_W * 0.5 - measurePixelText('GAME OVER', 5) * 0.5, 50, '#FF2D8C', 5);
+  ctx.restore();
+  drawPixelText(ctx, 'GAME OVER', GAME_W * 0.5 - measurePixelText('GAME OVER', 5) * 0.5, 50, '#FF69B4', 5);
+
+  // your rep
+  const repStr = 'YOUR REP: ' + (game ? Math.floor(game.rep) : 0);
+  drawPixelText(ctx, repStr, GAME_W * 0.5 - measurePixelText(repStr, 3) * 0.5, 130, '#FFFFFF', 3);
+
+  // best rep
+  const bestStr = 'BEST: ' + highScore.score + ' (' + highScore.name + ')';
+  drawPixelText(ctx, bestStr, GAME_W * 0.5 - measurePixelText(bestStr, 2) * 0.5, 170, '#FFD700', 2);
+
+  if (goIsNewHigh && goPhase !== 'done') {
+    // NEW HIGH SCORE flash
+    const nhPulse = Math.floor(goTimer / 10) % 2 === 0;
+    if (nhPulse) {
+      drawPixelText(ctx, 'NEW HIGH SCORE!', GAME_W * 0.5 - measurePixelText('NEW HIGH SCORE!', 3) * 0.5, 200, '#FFD700', 3);
+    }
+  }
+
+  if (goPhase === 'nameInput') {
+    drawPixelText(ctx, 'ENTER YOUR NAME', GAME_W * 0.5 - measurePixelText('ENTER YOUR NAME', 2) * 0.5, 240, '#aaa', 2);
+
+    // 3 character boxes
+    const boxW = 52, boxH = 52, gap = 12;
+    const totalW = boxW * 3 + gap * 2;
+    const startX = (GAME_W - totalW) * 0.5;
+
+    for (let i = 0; i < 3; i++) {
+      const bx = startX + i * (boxW + gap);
+      const by = 270;
+
+      // box bg
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(bx, by, boxW, boxH);
+
+      // box border
+      if (i === goCursor) {
+        // selected: neon glow border
+        ctx.save();
+        ctx.shadowColor = '#00E5FF';
+        ctx.shadowBlur = 8;
+        ctx.strokeStyle = '#00E5FF';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(bx, by, boxW, boxH);
+        ctx.restore();
+      } else {
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx, by, boxW, boxH);
+      }
+
+      // character
+      const ch = String.fromCharCode(65 + goName[i]);
+      drawPixelText(ctx, ch, bx + boxW * 0.5 - 3 * 4 * 0.5, by + 14, '#FFFFFF', 4);
+    }
+
+    // instructions
+    drawPixelText(ctx, 'UP/DOWN CHANGE  LEFT/RIGHT MOVE  ENTER CONFIRM', GAME_W * 0.5 - measurePixelText('UP/DOWN CHANGE  LEFT/RIGHT MOVE  ENTER CONFIRM', 1) * 0.5, 340, '#666', 1);
+  }
+
+  if (goPhase === 'done') {
+    // blink play again
+    const blinkOn = Math.floor(goTimer / 22) % 3 !== 2;
+    if (blinkOn) {
+      drawPixelText(ctx, 'PRESS SPACE TO PLAY AGAIN', GAME_W * 0.5 - measurePixelText('PRESS SPACE TO PLAY AGAIN', 2) * 0.5, 240, '#00E5FF', 2);
+    }
+  }
+
+  // share text
+  if (game) {
+    const shareStr = 'I GOT ' + Math.floor(game.rep) + ' REP! STILLGOTITCOLLECTIVE.COM';
+    drawPixelText(ctx, shareStr, GAME_W * 0.5 - measurePixelText(shareStr, 1) * 0.5, GAME_H - 55, '#555', 1);
+  }
+
+  // footer branding
+  drawPixelText(ctx, 'STILLGOTITCOLLECTIVE.COM', GAME_W * 0.5 - measurePixelText('STILLGOTITCOLLECTIVE.COM', 1) * 0.5, GAME_H - 35, '#444', 1);
+  drawPixelText(ctx, 'DANCE LIKE YOU DID. SLEEP LIKE YOU SHOULD.', GAME_W * 0.5 - measurePixelText('DANCE LIKE YOU DID. SLEEP LIKE YOU SHOULD.', 1) * 0.5, GAME_H - 22, '#333', 1);
+  drawPixelText(ctx, 'COLLECTIVE ENERGY.', GAME_W * 0.5 - measurePixelText('COLLECTIVE ENERGY.', 1) * 0.5, GAME_H - 10, '#333', 1);
+
+  // touch controls on game over (so tap-to-restart is visible)
+  if (isTouchDevice && goPhase === 'done') drawTouchControls();
+}
+
+// ─── §22 TOUCH CONTROLS ─────────────────────────────────────────────────────
+const isTouchDevice = navigator.maxTouchPoints > 0;
+const touchButtons = [
+  { id: 'left',  x: 16,          y: GAME_H - 100, w: 62, h: 62 },
+  { id: 'right', x: 88,          y: GAME_H - 100, w: 62, h: 62 },
+  { id: 'jump',  x: GAME_W - 88, y: GAME_H - 100, w: 70, h: 70 }
+];
+let touchState = { left: false, right: false, jump: false };
+
+function getTouchCanvasCoords(touch) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (touch.clientX - rect.left) / (rect.width  / GAME_W),
+    y: (touch.clientY - rect.top)  / (rect.height / GAME_H)
+  };
+}
+
+function hitTestButtons(tx, ty) {
+  touchState.left  = false;
+  touchState.right = false;
+  touchState.jump  = false;
+  for (let i = 0; i < touchButtons.length; i++) {
+    const b = touchButtons[i];
+    if (tx >= b.x && tx <= b.x + b.w && ty >= b.y && ty <= b.y + b.h) {
+      touchState[b.id] = true;
+    }
+  }
+}
+
+function syncTouchInput() {
+  input.left  = touchState.left  || input.left;
+  input.right = touchState.right || input.right;
+  input.jump  = touchState.jump  || input.jump;
+}
+
+function initTouchControls() {
+  canvas.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    if (!audioUnlocked) { audioUnlocked = true; initAudio(); if (audioCtx) audioCtx.resume(); }
+    touchState = { left: false, right: false, jump: false };
+    let anyButtonHit = false;
+    for (let i = 0; i < e.touches.length; i++) {
+      const c = getTouchCanvasCoords(e.touches[i]);
+      for (let b = 0; b < touchButtons.length; b++) {
+        const btn = touchButtons[b];
+        if (c.x >= btn.x && c.x <= btn.x + btn.w && c.y >= btn.y && c.y <= btn.y + btn.h) {
+          touchState[btn.id] = true;
+          anyButtonHit = true;
+        }
+      }
+    }
+    // On title/gameover: any tap anywhere acts as jump (start / play again)
+    if (!anyButtonHit && gameState !== STATE.PLAYING) {
+      touchState.jump = true;
+    }
+    // On gameover nameInput: jump button also acts as confirm (sets enter)
+    if (touchState.jump && gameState === STATE.GAMEOVER && goPhase === 'nameInput') {
+      input.enter = true;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+    touchState = { left: false, right: false, jump: false };
+    for (let i = 0; i < e.touches.length; i++) {
+      const c = getTouchCanvasCoords(e.touches[i]);
+      for (let b = 0; b < touchButtons.length; b++) {
+        const btn = touchButtons[b];
+        if (c.x >= btn.x && c.x <= btn.x + btn.w && c.y >= btn.y && c.y <= btn.y + btn.h) {
+          touchState[btn.id] = true;
+        }
+      }
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', function(e) {
+    e.preventDefault();
+    touchState = { left: false, right: false, jump: false };
+    input.enter = false; // clear touch-driven enter so rising edge works again next tap
+    // if any touches remain, re-check
+    if (e.touches.length > 0) {
+      for (let i = 0; i < e.touches.length; i++) {
+        const c = getTouchCanvasCoords(e.touches[i]);
+        for (let b = 0; b < touchButtons.length; b++) {
+          const btn = touchButtons[b];
+          if (c.x >= btn.x && c.x <= btn.x + btn.w && c.y >= btn.y && c.y <= btn.y + btn.h) {
+            touchState[btn.id] = true;
+          }
+        }
+      }
+    }
+  }, { passive: false });
+}
+
+function drawTouchControls() {
+  for (let i = 0; i < touchButtons.length; i++) {
+    const b = touchButtons[i];
+    const pressed = touchState[b.id];
+    // bg
+    ctx.fillStyle = pressed ? 'rgba(0,60,80,0.55)' : 'rgba(0,30,50,0.35)';
+    ctx.beginPath();
+    const r = 10;
+    ctx.moveTo(b.x + r, b.y);
+    ctx.lineTo(b.x + b.w - r, b.y);
+    ctx.quadraticCurveTo(b.x + b.w, b.y, b.x + b.w, b.y + r);
+    ctx.lineTo(b.x + b.w, b.y + b.h - r);
+    ctx.quadraticCurveTo(b.x + b.w, b.y + b.h, b.x + b.w - r, b.y + b.h);
+    ctx.lineTo(b.x + r, b.y + b.h);
+    ctx.quadraticCurveTo(b.x, b.y + b.h, b.x, b.y + b.h - r);
+    ctx.lineTo(b.x, b.y + r);
+    ctx.quadraticCurveTo(b.x, b.y, b.x + r, b.y);
+    ctx.closePath();
+    ctx.fill();
+    // border
+    ctx.strokeStyle = b.id === 'jump' ? '#FF2D8C' : '#00E5FF';
+    ctx.lineWidth = pressed ? 2 : 1;
+    ctx.stroke();
+    // label
+    const label = b.id === 'left' ? '<' : b.id === 'right' ? '>' : 'JUMP';
+    const lScale = b.id === 'jump' ? 2 : 3;
+    drawPixelText(ctx, label, b.x + b.w * 0.5 - measurePixelText(label, lScale) * 0.5, b.y + b.h * 0.5 - 3.5 * lScale * 0.5, b.id === 'jump' ? '#FF2D8C' : '#00E5FF', lScale);
+  }
+}
+
+// ─── §23 LOCALSTORAGE ────────────────────────────────────────────────────────
+const LS_KEY = 'sgic_highscore';
+
+function loadHighScore() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      if (typeof obj.score === 'number' && typeof obj.name === 'string') return obj;
+    }
+  } catch(e) {}
+  return { score: 0, name: 'AAA' };
+}
+
+function saveHighScore(score, name) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify({ score: Math.floor(score), name: name }));
+  } catch(e) {}
+}
+
+let highScore = { score: 0, name: 'AAA' };
+
+// ─── §24 STATE TRANSITIONS ──────────────────────────────────────────────────
+function transitionToTitle() {
+  gameState = STATE.TITLE;
+  titleTime = 0;
+  stopSequencer();
+  player = null;
+  game = null;
+}
+
+function transitionToPlaying() {
+  gameState = STATE.PLAYING;
+
+  game = {
+    lives: LIVES_START,
+    rep: 0,
+    distance: 0,
+    doubleJumpUnlocked: false,
+    unlockFlashTimer: 0,
+    meterFlash: 0,
+    meterFill: 0,
+    meterThreshold: 500,
+    lifeLostAnim: 0,
+    hintTimer: 0
+  };
+
+  player = {
+    x: 180,
+    y: 250,
+    vy: 0,
+    prevY: 250,
+    isGrounded: false,
+    wasGrounded: false,
+    isJumping: true,
+    coyoteTimer: 0,
+    jumpBufferTimer: 0,
+    hasDoubleJumped: false,
+    frame: 0,
+    animTick: 0,
+    invulnTimer: 0,
+    moving: false
+  };
+
+  chunks = [];
+  lastPlatEnd = { x: 100, y: 320 };
+  cameraX = 0;
+  lastBeatDropDist = 0;
+  shakeAmount = 0;
+
+  // generate initial chunks
+  ensureChunksAhead();
+
+  // start audio
+  initAudio();
+  if (audioCtx) audioCtx.resume();
+  startSequencer();
+}
+
+function transitionToGameOver() {
+  gameState = STATE.GAMEOVER;
+  goPhase = 'display';
+  goTimer = 0;
+  goName = [0, 0, 0];
+  goCursor = 0;
+  goIsNewHigh = false;
+  stopSequencer();
+}
+
+// ─── §25 BOOTSTRAP ──────────────────────────────────────────────────────────
+highScore = loadHighScore();
+resizeCanvas();
+gameState = STATE.TITLE;
+
+if (isTouchDevice) initTouchControls();
+
+requestAnimationFrame(gameLoop);
+
+</script>
+</body>
+</html>
