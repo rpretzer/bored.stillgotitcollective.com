@@ -48,14 +48,24 @@ const JUMP_VY = -12;
 const DOUBLE_JUMP_VY = -8;
 const COYOTE_FRAMES = 6;
 const JUMP_BUFFER_FRAMES = 4;
-const AUTO_SCROLL_SPEED = 3;
+const AUTO_SCROLL_SPEED_MIN = 1.5;
+const AUTO_SCROLL_SPEED_MAX = 3.2;
 const MOVE_SPEED = 2;
-const PLAYER_W = 16, PLAYER_H = 24;
+const SPRITE_SCALE = 2;
+const PLAYER_W = 16 * SPRITE_SCALE, PLAYER_H = 24 * SPRITE_SCALE; // 32 x 48
+const ENEMY_W  = 16 * SPRITE_SCALE, ENEMY_H  = 24 * SPRITE_SCALE;
 const CHUNK_WIDTH = 420;
 const COIN_VALUE = 50;
 const LIVES_START = 3;
 const DOUBLE_JUMP_UNLOCK_REP = 2000;
 const ENEMY_SPEED = 1.2;
+
+// Scroll speed ramps from MIN → MAX over the first 6 000 px of distance
+function getScrollSpeed() {
+  if (!game) return AUTO_SCROLL_SPEED_MIN;
+  return AUTO_SCROLL_SPEED_MIN +
+    (AUTO_SCROLL_SPEED_MAX - AUTO_SCROLL_SPEED_MIN) * Math.min(1, game.distance / 6000);
+}
 
 const STATE = { TITLE: 0, PLAYING: 1, GAMEOVER: 2 };
 let gameState = STATE.TITLE;
@@ -723,18 +733,21 @@ function drawPlayerJump(ctx, px, py) {
 function drawPlayer(ctx, player) {
   const px = player.x - cameraX;
   const py = player.y;
-  // invuln flash
   if (player.invulnTimer > 0 && Math.floor(player.invulnTimer / 4) % 2 === 0) return;
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.scale(SPRITE_SCALE, SPRITE_SCALE);
   if (player.isJumping) {
-    drawPlayerJump(ctx, px, py);
+    drawPlayerJump(ctx, 0, 0);
   } else {
     const f = Math.floor(player.animTick / 8) % 2;
     if (player.moving) {
-      f === 0 ? drawPlayerRunL(ctx, px, py) : drawPlayerRunR(ctx, px, py);
+      f === 0 ? drawPlayerRunL(ctx, 0, 0) : drawPlayerRunR(ctx, 0, 0);
     } else {
-      drawPlayerIdle(ctx, px, py);
+      drawPlayerIdle(ctx, 0, 0);
     }
   }
+  ctx.restore();
 }
 
 // ─── §11 ENEMY SPRITE + AI ──────────────────────────────────────────────────
@@ -790,24 +803,23 @@ function drawEnemyB(ctx, ex, ey) {
 function drawEnemy(ctx, enemy) {
   const ex = enemy.x - cameraX;
   const ey = enemy.y;
+  ctx.save();
+  ctx.translate(ex, ey);
+  ctx.scale(SPRITE_SCALE, SPRITE_SCALE);
   if (enemy.dir < 0) {
-    ctx.save();
-    ctx.translate(ex + 16, 0);
+    ctx.translate(16, 0);   // 16 = unscaled sprite width; scale applies after
     ctx.scale(-1, 1);
-    const f = Math.floor(enemy.animTick / 12) % 2;
-    f === 0 ? drawEnemyA(ctx, 0, ey) : drawEnemyB(ctx, 0, ey);
-    ctx.restore();
-  } else {
-    const f = Math.floor(enemy.animTick / 12) % 2;
-    f === 0 ? drawEnemyA(ctx, ex, ey) : drawEnemyB(ctx, ex, ey);
   }
+  const f = Math.floor(enemy.animTick / 12) % 2;
+  f === 0 ? drawEnemyA(ctx, 0, 0) : drawEnemyB(ctx, 0, 0);
+  ctx.restore();
 }
 
 function updateEnemy(enemy) {
   enemy.x += enemy.dir * ENEMY_SPEED;
   enemy.animTick++;
   if (enemy.x < enemy.platLeft) { enemy.x = enemy.platLeft; enemy.dir = 1; }
-  if (enemy.x + 16 > enemy.platRight) { enemy.x = enemy.platRight - 16; enemy.dir = -1; }
+  if (enemy.x + ENEMY_W > enemy.platRight) { enemy.x = enemy.platRight - ENEMY_W; enemy.dir = -1; }
 }
 
 // ─── §12 COIN SPRITE ────────────────────────────────────────────────────────
@@ -858,15 +870,19 @@ function generateChunk(startX) {
     const r3 = sRand(sd); sd = r3.s;
     const r4 = sRand(sd); sd = r4.s;
 
-    // gap
-    const minGap = 38 + diff * 55;
-    const maxGap = 70 + diff * 70;
-    const gap = minGap + r1.v * (maxGap - minGap);
-
-    // width
-    const minW = 55 - diff * 22;
-    const maxW = 140 - diff * 40;
-    const w = Math.max(40, minW + r2.v * (maxW - minW));
+    // first platform of the very first chunk: guaranteed safe landing zone
+    let gap, w;
+    if (i === 0 && startX === 0) {
+      gap = 20;
+      w   = 130;
+    } else {
+      const minGap = 35 + diff * 55;
+      const maxGap = 65 + diff * 75;
+      gap = minGap + r1.v * (maxGap - minGap);
+      const minW = 75 - diff * 30;
+      const maxW = 140 - diff * 40;
+      w = Math.max(45, minW + r2.v * (maxW - minW));
+    }
 
     // x position
     const px = prevEnd.x + gap;
@@ -896,9 +912,9 @@ function generateChunk(startX) {
       if (rEnemy.v < enemyProb) {
         const eRand = sRand(sd); sd = eRand.s;
         chunk.enemies.push({
-          x: px + 10 + eRand.v * (w - 30),
-          y: py - 24,
-          w: 16, h: 24,
+          x: px + 4 + eRand.v * Math.max(1, w - ENEMY_W - 8),
+          y: py - ENEMY_H,
+          w: ENEMY_W, h: ENEMY_H,
           platLeft: px + 2,
           platRight: px + w - 2,
           dir: 1,
@@ -919,8 +935,8 @@ function generateChunk(startX) {
       const cx = px + 8 + rCoin.v * (w - 20);
       chunk.coins.push({
         x: cx,
-        y: py - 28,
-        baseY: py - 28,
+        y: py - 56,
+        baseY: py - 56,
         bobPhase: rCoin.v * Math.PI * 2,
         collected: false
       });
@@ -1160,15 +1176,15 @@ function checkEnemyCollision() {
     // AABB
     const px = player.x, py = player.y;
     const ex = e.x, ey = e.y;
-    if (px + PLAYER_W > ex && px < ex + 16 && py + PLAYER_H > ey && py < ey + 24) {
-      // stomp check: player moving down AND player bottom is in enemy top zone
-      if (player.vy > 0 && (py + PLAYER_H) <= ey + 6 && (py + PLAYER_H) >= ey) {
+    if (px + PLAYER_W > ex && px < ex + ENEMY_W && py + PLAYER_H > ey && py < ey + ENEMY_H) {
+      // stomp check: player falling AND bottom edge within enemy's top stomp zone
+      if (player.vy > 0 && (py + PLAYER_H) <= ey + 6 * SPRITE_SCALE && (py + PLAYER_H) >= ey) {
         // STOMP
         e.alive = false;
         player.vy = -8;
         player.isJumping = true;
         game.rep += 100;
-        emitCoinBurst(ex + 8, ey);
+        emitCoinBurst(ex + ENEMY_W * 0.5, ey);
         triggerShake(3);
         audioPlayCoin();
       } else {
@@ -1193,10 +1209,10 @@ function checkCoinCollision() {
 
   for (let i = 0; i < coins.length; i++) {
     const c = coins[i];
-    const ccx = c.x + 6;
-    const ccy = c.y + 6;
+    const ccx = c.x + 6 * SPRITE_SCALE;
+    const ccy = c.y + 6 * SPRITE_SCALE;
     const dx = pcx - ccx, dy = pcy - ccy;
-    if (dx * dx + dy * dy < 24 * 24) {
+    if (dx * dx + dy * dy < 30 * 30) {
       c.collected = true;
       game.rep += COIN_VALUE;
       audioPlayCoin();
@@ -1213,8 +1229,9 @@ function updatePlayerPhysics() {
   // store previous Y for top-only collision
   player.prevY = player.y;
 
-  // horizontal: auto-scroll
-  player.x += AUTO_SCROLL_SPEED;
+  // horizontal: auto-scroll (speed ramps with distance)
+  const scrollSpd = getScrollSpeed();
+  player.x += scrollSpd;
   if (input.left)  player.x -= MOVE_SPEED;
   if (input.right) player.x += MOVE_SPEED;
 
@@ -1302,16 +1319,17 @@ let lastBeatDropDist = 0;
 
 function updateScoring() {
   if (!game) return;
-  // distance-based rep
-  game.rep += AUTO_SCROLL_SPEED / 10;
-  game.distance += AUTO_SCROLL_SPEED;
+  // distance-based rep (speed ramps with distance)
+  const scrollSpd = getScrollSpeed();
+  game.rep += scrollSpd / 10;
+  game.distance += scrollSpd;
 
   // meter threshold grows
   game.meterThreshold = 500 + Math.floor(game.distance / 2500) * 150;
   game.meterFill = game.rep % game.meterThreshold;
 
   // meter full flash
-  const prevFill = (game.rep - AUTO_SCROLL_SPEED / 10) % game.meterThreshold;
+  const prevFill = (game.rep - scrollSpd / 10) % game.meterThreshold;
   if (game.meterFill < prevFill && game.meterFill < 5) {
     game.meterFlash = 14;
   }
@@ -1352,9 +1370,6 @@ function gameLoop(timestamp) {
   const dt = timestamp - lastTime;
   lastTime = timestamp;
   frameCounter++;
-
-  // sync touch state into input flags every frame
-  if (isTouchDevice) syncTouchInput();
 
   // rising edges
   input.jumpPressed  = input.jump  && !prevInput.jump;
@@ -1454,8 +1469,12 @@ function drawPlaying() {
     const c = coins[i];
     const dx = c.x - cameraX;
     if (dx + 14 < -5 || dx > GAME_W + 5) continue;
-    const dy = c.baseY + Math.sin(c.bobPhase) * 4;
-    drawCoin(ctx, dx, dy);
+    const dy = c.baseY + Math.sin(c.bobPhase) * 5;
+    ctx.save();
+    ctx.translate(dx, dy);
+    ctx.scale(SPRITE_SCALE, SPRITE_SCALE);
+    drawCoin(ctx, 0, 0);
+    ctx.restore();
   }
 
   // player
@@ -1469,8 +1488,6 @@ function drawPlaying() {
   // ─── HUD (outside shake) ────────────────────────────────────────────────
   drawHUD();
 
-  // touch controls
-  if (isTouchDevice) drawTouchControls();
 }
 
 // ─── §19 TITLE SCREEN ───────────────────────────────────────────────────────
@@ -1623,7 +1640,7 @@ function drawHUD() {
     const hAlpha = game.hintTimer < 180 ? 0.7 : Math.max(0, 0.7 - (game.hintTimer - 180) / 80);
     if (hAlpha > 0) {
       ctx.globalAlpha = hAlpha;
-      drawPixelText(ctx, 'TAP LEFT/RIGHT TO MOVE | JUMP BUTTON', GAME_W * 0.5 - measurePixelText('TAP LEFT/RIGHT TO MOVE | JUMP BUTTON', 1) * 0.5, GAME_H - 18, '#999', 1);
+      drawPixelText(ctx, 'TILT LEFT/RIGHT TO STEER | TAP TO JUMP', GAME_W * 0.5 - measurePixelText('TILT LEFT/RIGHT TO STEER | TAP TO JUMP', 1) * 0.5, GAME_H - 18, '#999', 1);
       ctx.globalAlpha = 1;
     }
   }
@@ -1775,132 +1792,52 @@ function drawGameOver() {
   drawPixelText(ctx, 'DANCE LIKE YOU DID. SLEEP LIKE YOU SHOULD.', GAME_W * 0.5 - measurePixelText('DANCE LIKE YOU DID. SLEEP LIKE YOU SHOULD.', 1) * 0.5, GAME_H - 22, '#333', 1);
   drawPixelText(ctx, 'COLLECTIVE ENERGY.', GAME_W * 0.5 - measurePixelText('COLLECTIVE ENERGY.', 1) * 0.5, GAME_H - 10, '#333', 1);
 
-  // touch controls on game over (so tap-to-restart is visible)
-  if (isTouchDevice && goPhase === 'done') drawTouchControls();
 }
 
-// ─── §22 TOUCH CONTROLS ─────────────────────────────────────────────────────
+// ─── §22 TOUCH + ORIENTATION CONTROLS ───────────────────────────────────────
 const isTouchDevice = navigator.maxTouchPoints > 0;
-const touchButtons = [
-  { id: 'left',  x: 16,          y: GAME_H - 100, w: 62, h: 62 },
-  { id: 'right', x: 88,          y: GAME_H - 100, w: 62, h: 62 },
-  { id: 'jump',  x: GAME_W - 88, y: GAME_H - 100, w: 70, h: 70 }
-];
-let touchState = { left: false, right: false, jump: false };
+let orientationSetup = false;
+const TILT_DEAD = 12; // degrees – dead-zone centre so small bumps don't steer
 
-function getTouchCanvasCoords(touch) {
-  const rect = canvas.getBoundingClientRect();
-  return {
-    x: (touch.clientX - rect.left) / (rect.width  / GAME_W),
-    y: (touch.clientY - rect.top)  / (rect.height / GAME_H)
-  };
+// ── orientation (tilt left / right) ─────────────────────────────────────────
+function handleOrientation(e) {
+  const gamma = e.gamma || 0;
+  input.left  = gamma < -TILT_DEAD;
+  input.right = gamma >  TILT_DEAD;
 }
 
-function hitTestButtons(tx, ty) {
-  touchState.left  = false;
-  touchState.right = false;
-  touchState.jump  = false;
-  for (let i = 0; i < touchButtons.length; i++) {
-    const b = touchButtons[i];
-    if (tx >= b.x && tx <= b.x + b.w && ty >= b.y && ty <= b.y + b.h) {
-      touchState[b.id] = true;
-    }
+function setupOrientation() {
+  if (orientationSetup) return;
+  orientationSetup = true;
+  if (!window.DeviceOrientationEvent) return;
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // iOS 13+ – must be called inside a user-gesture handler
+    DeviceOrientationEvent.requestPermission()
+      .then(function(state) { if (state === 'granted') window.addEventListener('deviceorientation', handleOrientation); })
+      .catch(function() {});
+  } else {
+    window.addEventListener('deviceorientation', handleOrientation);
   }
 }
 
-function syncTouchInput() {
-  input.left  = touchState.left  || input.left;
-  input.right = touchState.right || input.right;
-  input.jump  = touchState.jump  || input.jump;
-}
-
+// ── touch (tap anywhere = jump) ─────────────────────────────────────────────
 function initTouchControls() {
   canvas.addEventListener('touchstart', function(e) {
     e.preventDefault();
     if (!audioUnlocked) { audioUnlocked = true; initAudio(); if (audioCtx) audioCtx.resume(); }
-    touchState = { left: false, right: false, jump: false };
-    let anyButtonHit = false;
-    for (let i = 0; i < e.touches.length; i++) {
-      const c = getTouchCanvasCoords(e.touches[i]);
-      for (let b = 0; b < touchButtons.length; b++) {
-        const btn = touchButtons[b];
-        if (c.x >= btn.x && c.x <= btn.x + btn.w && c.y >= btn.y && c.y <= btn.y + btn.h) {
-          touchState[btn.id] = true;
-          anyButtonHit = true;
-        }
-      }
-    }
-    // On title/gameover: any tap anywhere acts as jump (start / play again)
-    if (!anyButtonHit && gameState !== STATE.PLAYING) {
-      touchState.jump = true;
-    }
-    // On gameover nameInput: jump button also acts as confirm (sets enter)
-    if (touchState.jump && gameState === STATE.GAMEOVER && goPhase === 'nameInput') {
-      input.enter = true;
-    }
-  }, { passive: false });
-
-  canvas.addEventListener('touchmove', function(e) {
-    e.preventDefault();
-    touchState = { left: false, right: false, jump: false };
-    for (let i = 0; i < e.touches.length; i++) {
-      const c = getTouchCanvasCoords(e.touches[i]);
-      for (let b = 0; b < touchButtons.length; b++) {
-        const btn = touchButtons[b];
-        if (c.x >= btn.x && c.x <= btn.x + btn.w && c.y >= btn.y && c.y <= btn.y + btn.h) {
-          touchState[btn.id] = true;
-        }
-      }
+    setupOrientation();                          // first touch → request orientation permission
+    if (gameState === STATE.GAMEOVER && goPhase === 'nameInput') {
+      input.enter = true;                        // tap during name-input = confirm
+    } else {
+      input.jump  = true;                        // everywhere else = jump / start / restart
     }
   }, { passive: false });
 
   canvas.addEventListener('touchend', function(e) {
     e.preventDefault();
-    touchState = { left: false, right: false, jump: false };
-    input.enter = false; // clear touch-driven enter so rising edge works again next tap
-    // if any touches remain, re-check
-    if (e.touches.length > 0) {
-      for (let i = 0; i < e.touches.length; i++) {
-        const c = getTouchCanvasCoords(e.touches[i]);
-        for (let b = 0; b < touchButtons.length; b++) {
-          const btn = touchButtons[b];
-          if (c.x >= btn.x && c.x <= btn.x + btn.w && c.y >= btn.y && c.y <= btn.y + btn.h) {
-            touchState[btn.id] = true;
-          }
-        }
-      }
-    }
+    input.jump  = false;
+    input.enter = false;
   }, { passive: false });
-}
-
-function drawTouchControls() {
-  for (let i = 0; i < touchButtons.length; i++) {
-    const b = touchButtons[i];
-    const pressed = touchState[b.id];
-    // bg
-    ctx.fillStyle = pressed ? 'rgba(0,60,80,0.55)' : 'rgba(0,30,50,0.35)';
-    ctx.beginPath();
-    const r = 10;
-    ctx.moveTo(b.x + r, b.y);
-    ctx.lineTo(b.x + b.w - r, b.y);
-    ctx.quadraticCurveTo(b.x + b.w, b.y, b.x + b.w, b.y + r);
-    ctx.lineTo(b.x + b.w, b.y + b.h - r);
-    ctx.quadraticCurveTo(b.x + b.w, b.y + b.h, b.x + b.w - r, b.y + b.h);
-    ctx.lineTo(b.x + r, b.y + b.h);
-    ctx.quadraticCurveTo(b.x, b.y + b.h, b.x, b.y + b.h - r);
-    ctx.lineTo(b.x, b.y + r);
-    ctx.quadraticCurveTo(b.x, b.y, b.x + r, b.y);
-    ctx.closePath();
-    ctx.fill();
-    // border
-    ctx.strokeStyle = b.id === 'jump' ? '#FF2D8C' : '#00E5FF';
-    ctx.lineWidth = pressed ? 2 : 1;
-    ctx.stroke();
-    // label
-    const label = b.id === 'left' ? '<' : b.id === 'right' ? '>' : 'JUMP';
-    const lScale = b.id === 'jump' ? 2 : 3;
-    drawPixelText(ctx, label, b.x + b.w * 0.5 - measurePixelText(label, lScale) * 0.5, b.y + b.h * 0.5 - 3.5 * lScale * 0.5, b.id === 'jump' ? '#FF2D8C' : '#00E5FF', lScale);
-  }
 }
 
 // ─── §23 LOCALSTORAGE ────────────────────────────────────────────────────────
@@ -1973,8 +1910,19 @@ function transitionToPlaying() {
   lastBeatDropDist = 0;
   shakeAmount = 0;
 
-  // generate initial chunks
+  // generate initial chunks then place player ON the first platform
   ensureChunksAhead();
+  if (chunks.length > 0 && chunks[0].platforms.length > 0) {
+    const fp = chunks[0].platforms[0];
+    player.x      = fp.x + 24;
+    player.y      = fp.y - PLAYER_H;
+    player.prevY  = player.y;
+    player.vy     = 0;
+    player.isGrounded  = true;
+    player.wasGrounded = true;
+    player.isJumping   = false;
+    cameraX = player.x - 150;
+  }
 
   // start audio
   initAudio();
