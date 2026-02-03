@@ -976,6 +976,14 @@ function generateChunk(startX) {
   // update global last platform end
   lastPlatEnd = { x: prevEnd.x, y: prevEnd.y };
 
+  // track actual rightmost platform edge for correct culling
+  let maxX = startX;
+  for (let pi = 0; pi < chunk.platforms.length; pi++) {
+    const re = chunk.platforms[pi].x + chunk.platforms[pi].w;
+    if (re > maxX) maxX = re;
+  }
+  chunk.maxX = maxX;
+
   // props (visual only)
   const rPropCount = sRand(sd); sd = rPropCount.s;
   const propCount = 2 + Math.floor(rPropCount.v * 3);
@@ -995,15 +1003,17 @@ function generateChunk(startX) {
 }
 
 function ensureChunksAhead() {
-  const targetEnd = cameraX + GAME_W + CHUNK_WIDTH * 2;
-  while (chunks.length === 0 || (chunks[chunks.length - 1].startX + CHUNK_WIDTH) < targetEnd) {
+  // keep generating until platforms actually extend past the right edge of the screen
+  const needX = cameraX + GAME_W + 200;
+  while (lastPlatEnd.x < needX) {
     const startX = chunks.length === 0 ? 0 : chunks[chunks.length - 1].startX + CHUNK_WIDTH;
     chunks.push(generateChunk(startX));
   }
 }
 
 function cullChunksBehind() {
-  while (chunks.length > 0 && chunks[0].startX + CHUNK_WIDTH < cameraX - CHUNK_WIDTH) {
+  // cull only when the rightmost platform in the chunk is fully behind the camera
+  while (chunks.length > 0 && (chunks[0].maxX || chunks[0].startX + CHUNK_WIDTH) < cameraX - 50) {
     chunks.shift();
   }
 }
