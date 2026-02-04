@@ -1722,14 +1722,22 @@ let goTimer = 0;
 let goName = [0, 0, 0]; // indices 0-25 for A-Z
 let goCursor = 0;
 let goIsNewHigh = false;
+let goInsertIdx = 0;     // position in leaderboard where new entry will land
 
 function updateGameOver() {
   goTimer++;
 
   if (goPhase === 'display') {
     if (goTimer > 80) {
-      if (game && game.rep > highScore.score) {
+      const score = game ? Math.floor(game.rep) : 0;
+      // qualifies if board has fewer than 5 entries OR beats the last entry
+      if (leaderboard.length < 5 || score > leaderboard[leaderboard.length - 1].score) {
         goIsNewHigh = true;
+        // find insertion index (first position where score is strictly greater)
+        goInsertIdx = leaderboard.length;
+        for (let i = 0; i < leaderboard.length; i++) {
+          if (score > leaderboard[i].score) { goInsertIdx = i; break; }
+        }
         goPhase = 'nameInput';
       } else {
         goIsNewHigh = false;
@@ -1754,8 +1762,9 @@ function updateGameOver() {
     // Enter confirms (NOT jump — ArrowUp sets both up and jump)
     if (input.enterPressed) {
       const name = goName.map(function(i) { return String.fromCharCode(65 + i); }).join('');
-      saveHighScore(game.rep, name);
-      highScore = { score: game.rep, name: name };
+      leaderboard.splice(goInsertIdx, 0, { score: Math.floor(game.rep), name: name });
+      if (leaderboard.length > 5) leaderboard.length = 5;
+      saveLeaderboard(leaderboard);
       goPhase = 'done';
     }
   } else if (goPhase === 'done') {
@@ -1788,31 +1797,70 @@ function drawGameOver() {
 
   // your rep
   const repStr = 'YOUR REP: ' + (game ? Math.floor(game.rep) : 0);
-  drawPixelText(ctx, repStr, GAME_W * 0.5 - measurePixelText(repStr, 3) * 0.5, 130, '#FFFFFF', 3);
+  drawPixelText(ctx, repStr, GAME_W * 0.5 - measurePixelText(repStr, 3) * 0.5, 105, '#FFFFFF', 3);
 
-  // best rep
-  const bestStr = 'BEST: ' + highScore.score + ' (' + highScore.name + ')';
-  drawPixelText(ctx, bestStr, GAME_W * 0.5 - measurePixelText(bestStr, 2) * 0.5, 170, '#FFD700', 2);
+  // ── leaderboard (top 5) ────────────────────────────────────────────────
+  const boardY = 140;
+  const rowH   = 18;
+  // build a temporary view: if name-input is still open, show the pending
+  // entry at goInsertIdx so the player sees where they'll land
+  const viewBoard = leaderboard.slice();
+  if (goIsNewHigh && goPhase === 'nameInput') {
+    const pendingName = goName.map(function(i) { return String.fromCharCode(65 + i); }).join('');
+    viewBoard.splice(goInsertIdx, 0, { score: Math.floor(game.rep), name: pendingName });
+    if (viewBoard.length > 5) viewBoard.length = 5;
+  }
+  for (let i = 0; i < 5; i++) {
+    const ry = boardY + i * rowH;
+    const isNew = goIsNewHigh && goPhase !== 'done' && i === goInsertIdx;
 
+    if (isNew) {
+      // highlight background + neon border around the new-entry row
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.10)';
+      ctx.fillRect(GAME_W * 0.2, ry - 3, GAME_W * 0.6, rowH);
+      ctx.save();
+      ctx.shadowColor = '#00E5FF';
+      ctx.shadowBlur = 6;
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(GAME_W * 0.2, ry - 3, GAME_W * 0.6, rowH);
+      ctx.restore();
+    }
+
+    if (i < viewBoard.length) {
+      const e = viewBoard[i];
+      const color = isNew ? '#00E5FF' : (i === 0 ? '#FFD700' : '#aaa');
+      // pad score to 5 chars for right-alignment feel
+      let scoreStr = '' + e.score;
+      while (scoreStr.length < 5) scoreStr = ' ' + scoreStr;
+      const row = '#' + (i + 1) + '  ' + e.name + '  ' + scoreStr;
+      drawPixelText(ctx, row, GAME_W * 0.5 - measurePixelText(row, 2) * 0.5, ry, color, 2);
+    } else {
+      // empty slot
+      const row = '#' + (i + 1) + '  ---  -----';
+      drawPixelText(ctx, row, GAME_W * 0.5 - measurePixelText(row, 2) * 0.5, ry, '#444', 2);
+    }
+  }
+
+  // NEW HIGH SCORE flash (between leaderboard and name input)
   if (goIsNewHigh && goPhase !== 'done') {
-    // NEW HIGH SCORE flash
     const nhPulse = Math.floor(goTimer / 10) % 2 === 0;
     if (nhPulse) {
-      drawPixelText(ctx, 'NEW HIGH SCORE!', GAME_W * 0.5 - measurePixelText('NEW HIGH SCORE!', 3) * 0.5, 200, '#FFD700', 3);
+      drawPixelText(ctx, 'NEW HIGH SCORE!', GAME_W * 0.5 - measurePixelText('NEW HIGH SCORE!', 3) * 0.5, 240, '#FFD700', 3);
     }
   }
 
   if (goPhase === 'nameInput') {
-    drawPixelText(ctx, 'ENTER YOUR NAME', GAME_W * 0.5 - measurePixelText('ENTER YOUR NAME', 2) * 0.5, 240, '#aaa', 2);
+    drawPixelText(ctx, 'ENTER YOUR NAME', GAME_W * 0.5 - measurePixelText('ENTER YOUR NAME', 2) * 0.5, 270, '#aaa', 2);
 
     // 3 character boxes
-    const boxW = 52, boxH = 52, gap = 12;
+    const boxW = 46, boxH = 46, gap = 10;
     const totalW = boxW * 3 + gap * 2;
     const startX = (GAME_W - totalW) * 0.5;
 
     for (let i = 0; i < 3; i++) {
       const bx = startX + i * (boxW + gap);
-      const by = 270;
+      const by = 295;
 
       // box bg
       ctx.fillStyle = '#1a1a2e';
@@ -1820,7 +1868,6 @@ function drawGameOver() {
 
       // box border
       if (i === goCursor) {
-        // selected: neon glow border
         ctx.save();
         ctx.shadowColor = '#00E5FF';
         ctx.shadowBlur = 8;
@@ -1836,18 +1883,18 @@ function drawGameOver() {
 
       // character
       const ch = String.fromCharCode(65 + goName[i]);
-      drawPixelText(ctx, ch, bx + boxW * 0.5 - 3 * 4 * 0.5, by + 14, '#FFFFFF', 4);
+      drawPixelText(ctx, ch, bx + boxW * 0.5 - 3 * 4 * 0.5, by + 12, '#FFFFFF', 4);
     }
 
     // instructions
-    drawPixelText(ctx, 'UP/DOWN CHANGE  LEFT/RIGHT MOVE  ENTER CONFIRM', GAME_W * 0.5 - measurePixelText('UP/DOWN CHANGE  LEFT/RIGHT MOVE  ENTER CONFIRM', 1) * 0.5, 340, '#666', 1);
+    drawPixelText(ctx, 'UP/DOWN CHANGE  LEFT/RIGHT MOVE  ENTER CONFIRM', GAME_W * 0.5 - measurePixelText('UP/DOWN CHANGE  LEFT/RIGHT MOVE  ENTER CONFIRM', 1) * 0.5, 355, '#666', 1);
   }
 
   if (goPhase === 'done') {
     // blink play again
     const blinkOn = Math.floor(goTimer / 22) % 3 !== 2;
     if (blinkOn) {
-      drawPixelText(ctx, 'PRESS SPACE TO PLAY AGAIN', GAME_W * 0.5 - measurePixelText('PRESS SPACE TO PLAY AGAIN', 2) * 0.5, 240, '#00E5FF', 2);
+      drawPixelText(ctx, 'PRESS SPACE TO PLAY AGAIN', GAME_W * 0.5 - measurePixelText('PRESS SPACE TO PLAY AGAIN', 2) * 0.5, 260, '#00E5FF', 2);
     }
   }
 
@@ -1911,26 +1958,38 @@ function initTouchControls() {
 }
 
 // ─── §23 LOCALSTORAGE ────────────────────────────────────────────────────────
-const LS_KEY = 'sgic_highscore';
+const LS_KEY_OLD = 'sgic_highscore';   // legacy single-entry key (migration source)
+const LS_KEY     = 'sgic_leaderboard'; // top-5 array
 
-function loadHighScore() {
+function loadLeaderboard() {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (raw) {
-      const obj = JSON.parse(raw);
-      if (typeof obj.score === 'number' && typeof obj.name === 'string') return obj;
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr.slice(0, 5);
+    }
+    // one-time migration from old single-entry key
+    const oldRaw = localStorage.getItem(LS_KEY_OLD);
+    if (oldRaw) {
+      const obj = JSON.parse(oldRaw);
+      if (typeof obj.score === 'number' && typeof obj.name === 'string') {
+        const migrated = [{ score: Math.floor(obj.score), name: obj.name }];
+        localStorage.setItem(LS_KEY, JSON.stringify(migrated));
+        localStorage.removeItem(LS_KEY_OLD);
+        return migrated;
+      }
     }
   } catch(e) {}
-  return { score: 0, name: 'AAA' };
+  return [];
 }
 
-function saveHighScore(score, name) {
+function saveLeaderboard(board) {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify({ score: Math.floor(score), name: name }));
+    localStorage.setItem(LS_KEY, JSON.stringify(board.slice(0, 5)));
   } catch(e) {}
 }
 
-let highScore = { score: 0, name: 'AAA' };
+let leaderboard = [];
 
 // ─── §24 STATE TRANSITIONS ──────────────────────────────────────────────────
 function transitionToTitle() {
@@ -2012,7 +2071,7 @@ function transitionToGameOver() {
 }
 
 // ─── §25 BOOTSTRAP ──────────────────────────────────────────────────────────
-highScore = loadHighScore();
+leaderboard = loadLeaderboard();
 resizeCanvas();
 gameState = STATE.TITLE;
 
