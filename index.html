@@ -32,6 +32,7 @@ html, body {
 }
 #gameCanvas {
   display: block;
+  background: #0a0a1a;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
@@ -248,8 +249,8 @@ function resizeCanvas() {
   const scaleX = window.innerWidth  / GAME_W;
   const scaleY = window.innerHeight / GAME_H;
   const scale  = Math.min(scaleX, scaleY);
-  canvas.style.width  = (GAME_W * scale) + 'px';
-  canvas.style.height = (GAME_H * scale) + 'px';
+  canvas.style.width  = Math.round(GAME_W * scale) + 'px';
+  canvas.style.height = Math.round(GAME_H * scale) + 'px';
 }
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
