@@ -19,7 +19,7 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
-  width: 100%; height: 100%;
+  width: 100%; height: 100dvh;
   overflow: hidden;
   background: #0a0a1a;
   display: flex;
@@ -2038,10 +2038,19 @@ function setupOrientation() {
 }
 
 // ── touch (tap anywhere = jump) ─────────────────────────────────────────────
+let fullscreenRequested = false;
+
 function initTouchControls() {
   canvas.addEventListener('touchstart', function(e) {
     e.preventDefault();
     if (!audioUnlocked) { audioUnlocked = true; initAudio(); if (audioCtx) audioCtx.resume(); }
+    // one-shot fullscreen request — Android hides chrome; iOS silently ignores
+    if (!fullscreenRequested) {
+      fullscreenRequested = true;
+      const el = document.documentElement;
+      if      (el.requestFullscreen)            el.requestFullscreen();
+      else if (el.webkitRequestFullscreen)      el.webkitRequestFullscreen();
+    }
     setupOrientation();                          // first touch → request orientation permission
     if (gameState === STATE.GAMEOVER && goPhase === 'nameInput') {
       input.enter = true;                        // tap during name-input = confirm
@@ -2212,7 +2221,10 @@ PC               = PALETTES[selectedCharIdx];
 resizeCanvas();
 gameState = STATE.TITLE;
 
-if (isTouchDevice) initTouchControls();
+if (isTouchDevice) {
+  initTouchControls();
+  document.addEventListener('fullscreenchange', resizeCanvas); // re-scale when chrome hides/shows
+}
 
 requestAnimationFrame(gameLoop);
 
