@@ -1261,8 +1261,43 @@ function checkCoinCollision(coins) {
 }
 
 // ─── §16 PLAYER PHYSICS ─────────────────────────────────────────────────────
+function respawnPlayer() {
+  let bestPlat = null;
+  for (let ci = 0; ci < chunks.length; ci++) {
+    const ch = chunks[ci];
+    for (let pi = 0; pi < ch.platforms.length; pi++) {
+      const p = ch.platforms[pi];
+      if (p.x + p.w < cameraX) continue;
+      if (!bestPlat || p.x < bestPlat.x) bestPlat = p;
+    }
+  }
+  if (bestPlat) {
+    player.x = bestPlat.x + (bestPlat.w - PLAYER_W) * 0.5;
+    player.y = bestPlat.y - PLAYER_H - 60;
+  } else {
+    player.x = cameraX + 80;
+    player.y = 80;
+  }
+  player.vy = 0;
+  player.prevY = player.y;
+  player.isGrounded = false;
+  player.isJumping = true;
+  player.invulnTimer = 60;
+  player.hasDoubleJumped = false;
+}
+
 function updatePlayerPhysics() {
   if (!player || !game) return;
+
+  // death pause: keep camera scrolling, player stays off-screen until timer expires
+  if (game.deathPauseTimer > 0) {
+    game.deathPauseTimer--;
+    const scrollSpd = getScrollSpeed();
+    player.x += scrollSpd;
+    cameraX = player.x - 150;
+    if (game.deathPauseTimer === 0) respawnPlayer();
+    return;
+  }
 
   // store previous Y for top-only collision
   player.prevY = player.y;
@@ -1337,32 +1372,8 @@ function updatePlayerPhysics() {
       game.lives = 0;
       transitionToGameOver();
     } else {
-      // respawn: find the nearest platform at or ahead of the camera
-      let bestPlat = null;
-      for (let ci = 0; ci < chunks.length; ci++) {
-        const ch = chunks[ci];
-        for (let pi = 0; pi < ch.platforms.length; pi++) {
-          const p = ch.platforms[pi];
-          // platform must be at least partially visible or just ahead
-          if (p.x + p.w < cameraX) continue;
-          if (!bestPlat || p.x < bestPlat.x) bestPlat = p;
-        }
-      }
-      if (bestPlat) {
-        // centre player on the platform, drop from above
-        player.x = bestPlat.x + (bestPlat.w - PLAYER_W) * 0.5;
-        player.y = bestPlat.y - PLAYER_H - 60;
-      } else {
-        // fallback: no platform found, place at camera + 80
-        player.x = cameraX + 80;
-        player.y = 80;
-      }
-      player.vy = 0;
-      player.prevY = player.y;
-      player.isGrounded = false;
-      player.isJumping = true;
-      player.invulnTimer = 60;
-      player.hasDoubleJumped = false;
+      // start a 1-second pause; respawnPlayer() fires when it expires
+      game.deathPauseTimer = 60;
     }
   }
 
@@ -1943,7 +1954,8 @@ function transitionToPlaying() {
     meterFill: 0,
     meterThreshold: 500,
     lifeLostAnim: 0,
-    hintTimer: 0
+    hintTimer: 0,
+    deathPauseTimer: 0
   };
 
   player = {
