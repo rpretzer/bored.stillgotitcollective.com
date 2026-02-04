@@ -67,7 +67,7 @@ function getScrollSpeed() {
     (AUTO_SCROLL_SPEED_MAX - AUTO_SCROLL_SPEED_MIN) * Math.min(1, game.distance / 3500);
 }
 
-const STATE = { TITLE: 0, PLAYING: 1, GAMEOVER: 2 };
+const STATE = { TITLE: 0, PLAYING: 1, GAMEOVER: 2, CHARSELECT: 3 };
 let gameState = STATE.TITLE;
 let frameCounter = 0;
 
@@ -626,11 +626,17 @@ function drawGoldChainIcon(ctx, x, y, size) {
 }
 
 // ─── §10 PLAYER SPRITE ──────────────────────────────────────────────────────
-// Pixel colors
-const PC = {
-  skin: '#D2A679', shirt: '#FFFFFF', chain: '#FFD700', chainSh: '#B8860B',
-  pants: '#2c3e50', shoes: '#1abc9c', hair: '#2c2c2c', box: '#333', boxD: '#555'
-};
+// Swappable palette presets — PC always points to the active one
+const PALETTES = [
+  { skin:'#D2A679', shirt:'#FFFFFF', chain:'#FFD700', chainSh:'#B8860B', pants:'#2c3e50', shoes:'#1abc9c', hair:'#2c2c2c', box:'#333',    boxD:'#555'    }, // Original
+  { skin:'#E8C9A0', shirt:'#FF2D8C', chain:'#FF69B4', chainSh:'#C71585', pants:'#2d1248', shoes:'#FFFFFF', hair:'#1a1a1a', box:'#4a1040', boxD:'#6b1558' }, // Neon
+  { skin:'#8B6914', shirt:'#1a1a1a', chain:'#C0C0C0', chainSh:'#808080', pants:'#111111', shoes:'#222222', hair:'#000000', box:'#222',    boxD:'#333'    }, // Shadow
+  { skin:'#C4956A', shirt:'#FFD700', chain:'#FFD700', chainSh:'#B8860B', pants:'#FFFFFF', shoes:'#FFD700', hair:'#8B6914', box:'#B8860B', boxD:'#8B6508' }, // Gold
+  { skin:'#E8E8E8', shirt:'#00E5FF', chain:'#00E5FF', chainSh:'#0097A7', pants:'#1a237e', shoes:'#B388FF', hair:'#0d47a1', box:'#1565C0', boxD:'#0D47A1' }  // Cyber
+];
+const CHAR_NAMES = ['ORIGINAL', 'NEON', 'SHADOW', 'GOLD', 'CYBER'];
+let selectedCharIdx = 0;
+let PC = PALETTES[0];
 
 function drawPlayerIdle(ctx, px, py) {
   // hair
@@ -1455,6 +1461,9 @@ function gameLoop(timestamp) {
   if (gameState === STATE.TITLE) {
     updateTitle();
     drawTitle();
+  } else if (gameState === STATE.CHARSELECT) {
+    updateCharSelect();
+    drawCharSelect();
   } else if (gameState === STATE.PLAYING) {
     updatePlaying();
     drawPlaying();
@@ -1573,7 +1582,7 @@ const crewNames = [
 function updateTitle() {
   titleTime++;
   if (input.jumpPressed || input.enterPressed) {
-    transitionToPlaying();
+    transitionToCharSelect();
   }
 }
 
@@ -1638,6 +1647,97 @@ function drawTitle() {
 
   // footer
   drawPixelText(ctx, 'STILLGOTITCOLLECTIVE.COM', GAME_W * 0.5 - measurePixelText('STILLGOTITCOLLECTIVE.COM', 1) * 0.5, GAME_H - 20, '#444', 1);
+}
+
+// ─── §19b CHARACTER SELECT ──────────────────────────────────────────────────
+let charSelectTime = 0;
+
+function updateCharSelect() {
+  charSelectTime++;
+  if (input.leftPressed) {
+    selectedCharIdx = (selectedCharIdx + PALETTES.length - 1) % PALETTES.length;
+    PC = PALETTES[selectedCharIdx];
+  }
+  if (input.rightPressed) {
+    selectedCharIdx = (selectedCharIdx + 1) % PALETTES.length;
+    PC = PALETTES[selectedCharIdx];
+  }
+  if (input.enterPressed || input.jumpPressed) {
+    saveCharSelection(selectedCharIdx);
+    transitionToPlaying();
+  }
+}
+
+function drawCharSelect() {
+  ctx.clearRect(0, 0, GAME_W, GAME_H);
+  drawSky(ctx);
+
+  // scanlines
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  for (let sy = 0; sy < GAME_H; sy += 4) ctx.fillRect(0, sy, GAME_W, 2);
+
+  // title with glow
+  ctx.save();
+  ctx.shadowColor = '#FF2D8C';
+  ctx.shadowBlur = 8 + Math.sin(charSelectTime * 0.06) * 4;
+  drawPixelText(ctx, 'CHOOSE YOUR DANCER', GAME_W * 0.5 - measurePixelText('CHOOSE YOUR DANCER', 4) * 0.5, 40, '#FF2D8C', 4);
+  ctx.restore();
+  drawPixelText(ctx, 'CHOOSE YOUR DANCER', GAME_W * 0.5 - measurePixelText('CHOOSE YOUR DANCER', 4) * 0.5, 40, '#FF69B4', 4);
+
+  // character previews
+  const slotW = GAME_W / PALETTES.length;
+  for (let i = 0; i < PALETTES.length; i++) {
+    const cx    = slotW * i + slotW * 0.5;   // slot centre
+    const charTop = 170;
+    const boxW  = 72, boxH = 80;
+    const bx    = cx - boxW * 0.5, by = charTop - 10;
+
+    // selection box
+    if (i === selectedCharIdx) {
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.08)';
+      ctx.fillRect(bx, by, boxW, boxH);
+      ctx.save();
+      ctx.shadowColor = '#00E5FF';
+      ctx.shadowBlur = 10;
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bx, by, boxW, boxH);
+      ctx.restore();
+    } else {
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx, by, boxW, boxH);
+    }
+
+    // draw idle pose in this palette
+    const savedPC = PC;
+    PC = PALETTES[i];
+    ctx.save();
+    ctx.translate(cx - 16, charTop);   // 16 = half scaled sprite width
+    ctx.scale(SPRITE_SCALE, SPRITE_SCALE);
+    drawPlayerIdle(ctx, 0, 0);
+    ctx.restore();
+    PC = savedPC;
+
+    // name label
+    const nameColor = i === selectedCharIdx ? '#00E5FF' : '#888';
+    drawPixelText(ctx, CHAR_NAMES[i], cx - measurePixelText(CHAR_NAMES[i], 2) * 0.5, by + boxH + 4, nameColor, 2);
+  }
+
+  // blinking GO prompt
+  const blinkOn = Math.floor(charSelectTime / 22) % 3 !== 2;
+  if (blinkOn) {
+    const goText = isTouchDevice ? 'TAP CENTER TO GO' : 'PRESS SPACE TO GO';
+    ctx.save();
+    ctx.shadowColor = '#00E5FF';
+    ctx.shadowBlur = 5;
+    drawPixelText(ctx, goText, GAME_W * 0.5 - measurePixelText(goText, 2) * 0.5, GAME_H - 70, '#00E5FF', 2);
+    ctx.restore();
+  }
+
+  // nav hint
+  const hint = isTouchDevice ? 'TAP LEFT / RIGHT TO SWITCH' : 'LEFT / RIGHT ARROW KEYS TO SWITCH';
+  drawPixelText(ctx, hint, GAME_W * 0.5 - measurePixelText(hint, 1) * 0.5, GAME_H - 40, '#666', 1);
 }
 
 // ─── §20 HUD OVERLAY ────────────────────────────────────────────────────────
@@ -1945,6 +2045,13 @@ function initTouchControls() {
     setupOrientation();                          // first touch → request orientation permission
     if (gameState === STATE.GAMEOVER && goPhase === 'nameInput') {
       input.enter = true;                        // tap during name-input = confirm
+    } else if (gameState === STATE.CHARSELECT) {
+      // left / centre / right thirds route to nav or confirm
+      const rect = canvas.getBoundingClientRect();
+      const touchX = (e.touches[0].clientX - rect.left) / rect.width;
+      if      (touchX < 0.33)  input.left  = true;
+      else if (touchX > 0.67)  input.right = true;
+      else                     input.enter = true;
     } else {
       input.jump  = true;                        // everywhere else = jump / start / restart
     }
@@ -1954,6 +2061,10 @@ function initTouchControls() {
     e.preventDefault();
     input.jump  = false;
     input.enter = false;
+    if (gameState === STATE.CHARSELECT) {
+      input.left  = false;
+      input.right = false;
+    }
   }, { passive: false });
 }
 
@@ -1991,6 +2102,24 @@ function saveLeaderboard(board) {
 
 let leaderboard = [];
 
+// ── character selection persistence ────────────────────────────────────────
+const LS_CHAR_KEY = 'sgic_char';
+
+function loadCharSelection() {
+  try {
+    const raw = localStorage.getItem(LS_CHAR_KEY);
+    if (raw !== null) {
+      const idx = parseInt(raw, 10);
+      if (idx >= 0 && idx < PALETTES.length) return idx;
+    }
+  } catch(e) {}
+  return 0;
+}
+
+function saveCharSelection(idx) {
+  try { localStorage.setItem(LS_CHAR_KEY, '' + idx); } catch(e) {}
+}
+
 // ─── §24 STATE TRANSITIONS ──────────────────────────────────────────────────
 function transitionToTitle() {
   gameState = STATE.TITLE;
@@ -1998,6 +2127,12 @@ function transitionToTitle() {
   stopSequencer();
   player = null;
   game = null;
+}
+
+function transitionToCharSelect() {
+  gameState = STATE.CHARSELECT;
+  charSelectTime = 0;
+  PC = PALETTES[selectedCharIdx];
 }
 
 function transitionToPlaying() {
@@ -2071,7 +2206,9 @@ function transitionToGameOver() {
 }
 
 // ─── §25 BOOTSTRAP ──────────────────────────────────────────────────────────
-leaderboard = loadLeaderboard();
+leaderboard      = loadLeaderboard();
+selectedCharIdx  = loadCharSelection();
+PC               = PALETTES[selectedCharIdx];
 resizeCanvas();
 gameState = STATE.TITLE;
 
