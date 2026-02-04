@@ -825,7 +825,7 @@ function drawPlayerJump(ctx, px, py) {
 
 function drawPlayer(ctx, player) {
   const px = player.x - cameraX;
-  const py = player.y;
+  const py = Math.round(player.y);
   if (player.invulnTimer > 0 && Math.floor(player.invulnTimer / 4) % 2 === 0) return;
   ctx.save();
   ctx.translate(px, py);
