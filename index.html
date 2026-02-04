@@ -1727,7 +1727,7 @@ function drawCharSelect() {
   // blinking GO prompt
   const blinkOn = Math.floor(charSelectTime / 22) % 3 !== 2;
   if (blinkOn) {
-    const goText = isTouchDevice ? 'TAP CENTER TO GO' : 'PRESS SPACE TO GO';
+    const goText = isTouchDevice ? 'TAP HERE TO GO' : 'PRESS SPACE TO GO';
     ctx.save();
     ctx.shadowColor = '#00E5FF';
     ctx.shadowBlur = 5;
@@ -1736,7 +1736,7 @@ function drawCharSelect() {
   }
 
   // nav hint
-  const hint = isTouchDevice ? 'TAP LEFT / RIGHT TO SWITCH' : 'LEFT / RIGHT ARROW KEYS TO SWITCH';
+  const hint = isTouchDevice ? 'TAP A DANCER TO PICK' : 'LEFT / RIGHT ARROW KEYS TO SWITCH';
   drawPixelText(ctx, hint, GAME_W * 0.5 - measurePixelText(hint, 1) * 0.5, GAME_H - 40, '#666', 1);
 }
 
@@ -2055,12 +2055,16 @@ function initTouchControls() {
     if (gameState === STATE.GAMEOVER && goPhase === 'nameInput') {
       input.enter = true;                        // tap during name-input = confirm
     } else if (gameState === STATE.CHARSELECT) {
-      // left / centre / right thirds route to nav or confirm
+      // tap a character to select it; tap below the characters to confirm
       const rect = canvas.getBoundingClientRect();
-      const touchX = (e.touches[0].clientX - rect.left) / rect.width;
-      if      (touchX < 0.33)  input.left  = true;
-      else if (touchX > 0.67)  input.right = true;
-      else                     input.enter = true;
+      const touchX = (e.touches[0].clientX - rect.left) / rect.width * GAME_W;
+      const touchY = (e.touches[0].clientY - rect.top)  / rect.height * GAME_H;
+      if (touchY < 350) {
+        const idx = Math.floor(touchX / (GAME_W / PALETTES.length));
+        if (idx >= 0 && idx < PALETTES.length) { selectedCharIdx = idx; PC = PALETTES[idx]; }
+      } else {
+        input.enter = true;   // confirm / GO
+      }
     } else {
       input.jump  = true;                        // everywhere else = jump / start / restart
     }
@@ -2070,10 +2074,7 @@ function initTouchControls() {
     e.preventDefault();
     input.jump  = false;
     input.enter = false;
-    if (gameState === STATE.CHARSELECT) {
-      input.left  = false;
-      input.right = false;
-    }
+    // CHARSELECT handled via direct tap-to-select; no left/right state to clear
   }, { passive: false });
 }
 
