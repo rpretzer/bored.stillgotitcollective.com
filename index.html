@@ -60,6 +60,65 @@ const LIVES_START = 3;
 const DOUBLE_JUMP_UNLOCK_REP = 2000;
 const ENEMY_SPEED = 1.2;
 
+// ─── STAGE DEFINITIONS ──────────────────────────────────────────────────────
+const STAGES = [
+  { // 0 – Neon City
+    name: 'Neon City',
+    distStart: 0,
+    sky: ['#050510', 0.6, '#0d0d2a', 1, '#2a0a4a'],
+    skylineSilhouette: '#0d0d1f',
+    skylineSeed: 42,
+    ground: '#0d0d2a', groundEdge: '#1a0a3a',
+    platCuts: [0.34, 0.67],
+    bpmBase: 118,
+    enemyPalette: { skin:'#E8C39E', jacket:'#E63946', pants:'#2c3e50', shoes:'#f39c12', hair:'#1a1a1a' }
+  },
+  { // 1 – Graffiti Yards
+    name: 'Graffiti Yards',
+    distStart: 18000,
+    sky: ['#0a0a10', 0.6, '#1a1a2e', 1, '#2a1a1a'],
+    skylineSilhouette: '#151510',
+    skylineSeed: 137,
+    ground: '#1a1a2e', groundEdge: '#2a1520',
+    platCuts: [0.20, 0.80],
+    bpmBase: 126,
+    enemyPalette: { skin:'#D4A574', jacket:'#27AE60', pants:'#1a2a1a', shoes:'#e67e22', hair:'#2d1b00' }
+  },
+  { // 2 – Subway Depths
+    name: 'Subway Depths',
+    distStart: 36000,
+    sky: ['#050508', 0.6, '#0a0a18', 1, '#150a2a'],
+    skylineSilhouette: '#0a0a14',
+    skylineSeed: 271,
+    ground: '#0a0a18', groundEdge: '#1a0a2a',
+    platCuts: [0.20, 0.40],
+    bpmBase: 134,
+    enemyPalette: { skin:'#C4A882', jacket:'#8E44AD', pants:'#1a1a2e', shoes:'#9b59b6', hair:'#0d0d1f' }
+  },
+  { // 3 – After Hours
+    name: 'After Hours',
+    distStart: 54000,
+    sky: ['#020205', 0.6, '#080820', 1, '#0a1530'],
+    skylineSilhouette: '#080810',
+    skylineSeed: 509,
+    ground: '#080820', groundEdge: '#0a1520',
+    platCuts: [0.34, 0.67],
+    bpmBase: 142,
+    enemyPalette: { skin:'#B8A090', jacket:'#2980B9', pants:'#1a1a2a', shoes:'#5DADE2', hair:'#0a0a14' }
+  }
+];
+
+function getCurrentStage() {
+  if (!game) return STAGES[0];
+  for (let i = STAGES.length - 1; i >= 0; i--) if (game.distance >= STAGES[i].distStart) return STAGES[i];
+  return STAGES[0];
+}
+function getCurrentStageIdx() {
+  if (!game) return 0;
+  for (let i = STAGES.length - 1; i >= 0; i--) if (game.distance >= STAGES[i].distStart) return i;
+  return 0;
+}
+
 // Scroll speed ramps from MIN → MAX over the first 3 500 px of distance
 function getScrollSpeed() {
   if (!game) return AUTO_SCROLL_SPEED_MIN;
@@ -785,7 +844,7 @@ function drawPlayer(ctx, player) {
 }
 
 // ─── §11 ENEMY SPRITE + AI ──────────────────────────────────────────────────
-const EC = { skin: '#E8C39E', jacket: '#E63946', pants: '#2c3e50', shoes: '#f39c12', hair: '#1a1a1a' };
+let EC = { skin: '#E8C39E', jacket: '#E63946', pants: '#2c3e50', shoes: '#f39c12', hair: '#1a1a1a' };
 
 function drawEnemyA(ctx, ex, ey) {
   // hair / hat
@@ -934,7 +993,7 @@ function generateChunk(startX) {
     if (py < 80)  py = 80;
     if (py > 370) py = 370;
 
-    const type = Math.floor(r3.v * 3); // 0=neon, 1=graffiti, 2=subway
+    const _stg = getCurrentStage(); const type = r3.v < _stg.platCuts[0] ? 0 : r3.v < _stg.platCuts[1] ? 1 : 2;
     const platH = 16;
 
     chunk.platforms.push({ x: px, y: py, w: w, h: platH, type: type, seed: (px * 31 + py * 17) | 0 });
@@ -1056,27 +1115,25 @@ function getAllCoins() {
 }
 
 // ─── §14 PARALLAX BACKGROUNDS ───────────────────────────────────────────────
-// Skyline strip (generated once)
-let skylinerGenerated = false;
-let skylineData = []; // array of {x, w, h, windows:[{x,y,color},...]}
+// Skyline strips (one per stage, lazy-generated)
+let skylineStrips = [null, null, null, null];
 
-function generateSkylineStrip() {
-  if (skylinerGenerated) return;
-  skylinerGenerated = true;
+function generateSkylineStrip(stageIdx) {
+  if (skylineStrips[stageIdx]) return;
+  const strip = [];
   let sx = 0;
   const winColors = ['#FF2D8C','#00E5FF','#FFD700','#FF6B6B','#B388FF'];
-  let sd = 42;
+  let sd = STAGES[stageIdx].skylineSeed;
   while (sx < 2500) {
     const r1 = sRand(sd); sd = r1.s;
     const r2 = sRand(sd); sd = r2.s;
     const bw = 20 + Math.floor(r1.v * 40);
     const bh = 50 + Math.floor(r2.v * 90);
     const wins = [];
-    // generate windows
     for (let wy = 6; wy < bh - 4; wy += 8 + Math.floor(Math.random() * 4)) {
       for (let wx = 4; wx < bw - 4; wx += 6 + Math.floor(Math.random() * 3)) {
         const rw = sRand(sd); sd = rw.s;
-        if (rw.v < 0.55) { // 55% chance window is lit
+        if (rw.v < 0.55) {
           const rc = sRand(sd); sd = rc.s;
           wins.push({ x: wx, y: wy, color: winColors[Math.floor(rc.v * winColors.length)] });
         } else {
@@ -1084,42 +1141,44 @@ function generateSkylineStrip() {
         }
       }
     }
-    skylineData.push({ x: sx, w: bw, h: bh, windows: wins });
+    strip.push({ x: sx, w: bw, h: bh, windows: wins });
     sx += bw + 2 + Math.floor(Math.random() * 8);
   }
+  skylineStrips[stageIdx] = strip;
 }
 
 function drawSky(ctx) {
+  const s = getCurrentStage();
   const grad = ctx.createLinearGradient(0, 0, 0, GAME_H);
-  grad.addColorStop(0, '#050510');
-  grad.addColorStop(0.6, '#0d0d2a');
-  grad.addColorStop(1, '#2a0a4a');
+  grad.addColorStop(0,       s.sky[0]);
+  grad.addColorStop(s.sky[1], s.sky[2]);
+  grad.addColorStop(s.sky[3], s.sky[4]);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, GAME_W, GAME_H);
 }
 
 function drawSkyline(ctx) {
-  generateSkylineStrip();
+  const _si = getCurrentStageIdx();
+  generateSkylineStrip(_si);
+  const skyData = skylineStrips[_si];
+  const silCol = getCurrentStage().skylineSilhouette;
   const parallax = 0.12;
   const offsetX = cameraX * parallax;
   const stripW = 2500;
-  // tile the strip
   const tileOffset = offsetX % stripW;
 
   for (let tile = -1; tile <= 1; tile++) {
     const baseX = -tileOffset + tile * stripW;
-    for (let i = 0; i < skylineData.length; i++) {
-      const b = skylineData[i];
+    for (let i = 0; i < skyData.length; i++) {
+      const b = skyData[i];
       const bx = baseX + b.x;
-      const by = GAME_H - 140 - b.h; // buildings sit on a horizon line
+      const by = GAME_H - 140 - b.h;
 
       if (bx + b.w < -10 || bx > GAME_W + 10) continue;
 
-      // building silhouette
-      ctx.fillStyle = '#0d0d1f';
+      ctx.fillStyle = silCol;
       ctx.fillRect(bx, by, b.w, b.h + 140);
 
-      // windows
       for (let w = 0; w < b.windows.length; w++) {
         const win = b.windows[w];
         ctx.fillStyle = win.color;
@@ -1143,7 +1202,7 @@ function drawMidground(ctx) {
       switch(prop.type) {
         case 0: drawBoombox(ctx, dx, prop.y - 11); break;
         case 3: // flyer
-          ctx.fillStyle = '#1a1a2e';
+          ctx.fillStyle = getCurrentStage().ground;
           ctx.fillRect(dx, prop.y - 18, 16, 22);
           ctx.fillStyle = '#FF2D8C';
           ctx.fillRect(dx + 2, prop.y - 16, 12, 2);
@@ -1174,9 +1233,10 @@ function drawNearground(ctx) {
     }
   }
   // ground line
-  ctx.fillStyle = '#0d0d2a';
+  const _gs = getCurrentStage();
+  ctx.fillStyle = _gs.ground;
   ctx.fillRect(0, GAME_H - 30, GAME_W, 30);
-  ctx.fillStyle = '#1a0a3a';
+  ctx.fillStyle = _gs.groundEdge;
   ctx.fillRect(0, GAME_H - 31, GAME_W, 2);
 }
 
@@ -1431,7 +1491,15 @@ function updateScoring() {
   }
 
   // difficulty also bumps BPM smoothly
-  bpm = 118 + getDifficulty() * 50;
+  bpm = getCurrentStage().bpmBase + getDifficulty() * 50;
+
+  // stage transition detection
+  const _newStageIdx = getCurrentStageIdx();
+  if (_newStageIdx !== game.currentStageIdx) {
+    game.currentStageIdx = _newStageIdx;
+    game.stageFlashTimer = 90;
+  }
+  if (game.stageFlashTimer > 0) game.stageFlashTimer--;
 }
 
 // ─── §18 MAIN GAME LOOP ─────────────────────────────────────────────────────
@@ -1516,6 +1584,8 @@ function drawPlaying() {
 
   // shake offset
   const shake = getShakeOffset();
+
+  EC = getCurrentStage().enemyPalette;
 
   ctx.save();
   ctx.translate(shake.x, shake.y);
@@ -1802,6 +1872,29 @@ function drawHUD() {
     ctx.restore();
     ctx.globalAlpha = alpha;
     drawPixelText(ctx, 'UNLOCKED!', GAME_W * 0.5 - measurePixelText('UNLOCKED!', 3) * 0.5, GAME_H * 0.5 + 10, '#FFD700', 3);
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Stage Transition Overlay ──
+  if (game.stageFlashTimer > 0) {
+    const t = game.stageFlashTimer; // 90 → 0
+    let alpha;
+    if (t > 60)      alpha = (90 - t) / 30;        // frames 90→61: fade in 0→1
+    else if (t > 30) alpha = 1;                     // frames 60→31: hold
+    else             alpha = t / 30;                // frames 30→1:  fade out 1→0
+    ctx.fillStyle = 'rgba(0,0,0,' + (0.6 * alpha) + ')';
+    ctx.fillRect(0, 0, GAME_W, GAME_H);
+    const stg = getCurrentStage();
+    const glowCol = stg.sky[0];
+    ctx.globalAlpha = alpha;
+    ctx.save();
+    ctx.shadowColor = glowCol;
+    ctx.shadowBlur = 14;
+    const label = 'STAGE ' + (getCurrentStageIdx() + 1);
+    drawPixelText(ctx, label, GAME_W * 0.5 - measurePixelText(label, 4) * 0.5, GAME_H * 0.5 - 42, glowCol, 4);
+    ctx.restore();
+    ctx.shadowColor = 'transparent';
+    drawPixelText(ctx, stg.name, GAME_W * 0.5 - measurePixelText(stg.name, 2) * 0.5, GAME_H * 0.5 + 12, '#ccc', 2);
     ctx.globalAlpha = 1;
   }
 
@@ -2159,7 +2252,9 @@ function transitionToPlaying() {
     meterThreshold: 500,
     lifeLostAnim: 0,
     hintTimer: 0,
-    deathPauseTimer: 0
+    deathPauseTimer: 0,
+    currentStageIdx: 0,
+    stageFlashTimer: 0
   };
 
   player = {
@@ -2180,6 +2275,7 @@ function transitionToPlaying() {
   };
 
   chunks = [];
+  skylineStrips = [null, null, null, null];
   lastPlatEnd = { x: 100, y: 320 };
   cameraX = 0;
   lastBeatDropDist = 0;
